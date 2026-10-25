@@ -1,0 +1,18 @@
+# Preserve line endings exactly; fixtures use CR-only (0x0D) and must not be normalized.
+* text=auto eol=lf
+*.csv -text
+*.sqlite -text
+*.sqlite3 -text
+*.db -text
+*.exe -text
+*.pdb -text
+*.bundle -text
+*.zip -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.pdf -text
+*.docx -text
+*.xlsx -text
+*.lock -text
