@@ -6,9 +6,14 @@
 > 對應之知識庫版本：`2026/Knowledge` v1.0（2026-10-20）。
 > **所有數字皆可追溯**，追溯對照見 [`../Knowledge/traceability/claims-vs-evidence.md`](../../Knowledge/traceability/claims-vs-evidence.md)。
 
-## [Unreleased]
+### 本機優先基礎（Local-First Foundation）— Phase 0
 
-### 帳本累計與發布閘門
+- 初始化 Git 儲存庫（`main` 分支），首次提交 `aa2fc26`，標籤 `v1.0.2`。
+- 新增 `scripts/check.ps1` 固定檢查入口（fmt + clippy + 單元/整合測試 + SHA-256 fixture 驗證）。
+- 新增 `.env.example`、`.gitattributes`（保留 CR-only 位元組）；`.gitignore` 擴充 `.env.*` 但保留 `.env.example`。
+- 更新 `AGENTS.md`：本機檢查入口、備份指令、CLI 速查、Release Gate 狀態機。
+- 全程式碼以 `cargo fmt --all` 對齊 rustfmt；`scripts/check.ps1` 全綠。
+- 離線備份：`git bundle` 產出並 `git bundle verify` 通過；還原演練（clone + build）成功。
 
 - 新增 `cumulative_balance` 表（`MdmCatalog::new` 初始化）：`customer_id` 主鍵、`balance_cents`、`updated_at`；累加入口 `MdmCatalog::register_cumulative`，唯讀查詢 `MdmHub::get_cumulative_balance`（LOCAL-048）。
 - `IdempotencyLedger::release_file_batch` 在刪除 `file_batches` 前先刪除 `transaction_keys`（LOCAL-049）。

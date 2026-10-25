@@ -104,7 +104,11 @@
   發布（recipients）
 ```
 
-## 3. 三個關鍵基礎模組
+### 2.4 可插拔管線（`pipeline.rs`）
+
+`crates/wellfit_mtrix/src/pipeline.rs` 提供 `PipelineStage` trait 與 `Pipeline` 容器，
+支援 Parse / Repair / Validate / Aggregate / CrossFile / Report / Output 七階段可插拔、可跳過、可重排，
+共享 `PipelineContext`。目前為基礎架構（階段實作逐步遷入，行為等價目標）。
 
 ### 3.1 `contract` — 名稱解析的欄位契約
 
