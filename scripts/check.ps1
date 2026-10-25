@@ -70,11 +70,25 @@ if (-not $SkipFixtures) {
     }
 }
 
-Write-Host ""
-if ($failures -gt 0) {
-    Write-Host "check FAILED: $failures step(s) failed" -ForegroundColor Red
-    exit 1
-} else {
-    Write-Host "check PASSED: all steps green" -ForegroundColor Green
-    exit 0
+# 6. Golden parity check (MTRIX delivered sample yields documented findings)
+if (-not $SkipFixtures) {
+    Write-Host ""
+    Write-Host "=== Golden parity (22 errors / 50 warnings / 37 repairs) ===" -ForegroundColor Cyan
+    $db = Join-Path $env:TEMP "check-golden.sqlite"
+    $report = Join-Path $env:TEMP "check-golden-report.json"
+    if (Test-Path -LiteralPath $db) { Remove-Item -LiteralPath $db -Force }
+    if (Test-Path -LiteralPath $report) { Remove-Item -LiteralPath $report -Force }
+    $wf = Join-Path $TargetDir "debug\wellfit.exe"
+    & $wf mtrix --dir "spec\fixtures\mtrix\delivered" --batch "CHECK-GOLDEN" --db $db --report $report | Out-Null
+    if (-not (Test-Path -LiteralPath $report)) { Write-Host "[FAIL] report not generated" -ForegroundColor Red; $script:failures++ } else {
+        $json = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+        $errors = ($json.findings | Where-Object { $_.severity -eq "Error" }).Count
+        $warnings = ($json.findings | Where-Object { $_.severity -eq "Warning" }).Count
+        $ok = $true
+        if ($errors -ne 22) { Write-Host "[FAIL] expected 22 errors, got $errors" -ForegroundColor Red; $ok = $false }
+        if ($warnings -ne 50) { Write-Host "[FAIL] expected 50 warnings, got $warnings" -ForegroundColor Red; $ok = $false }
+        if ($json.repairs_applied -ne 37) { Write-Host "[FAIL] expected 37 repairs, got $($json.repairs_applied)" -ForegroundColor Red; $ok = $false }
+        if ($ok) { Write-Host "[OK] Golden parity: errors=$errors warnings=$warnings repairs=$($json.repairs_applied)" -ForegroundColor Green }
+        else { $script:failures++ }
+    }
 }

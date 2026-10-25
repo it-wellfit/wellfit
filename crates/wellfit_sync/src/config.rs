@@ -117,7 +117,7 @@ pub fn list_devices(path: &Path) {
     }
 }
 
-fn load_device_list(path: &Path) -> DeviceList {
+pub fn load_device_list(path: &Path) -> DeviceList {
     let devices_path = path.with_extension("devices.json");
     if devices_path.exists() {
         if let Ok(text) = fs::read_to_string(&devices_path) {

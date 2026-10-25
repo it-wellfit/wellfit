@@ -596,7 +596,15 @@ impl IdempotencyLedger {
         })
     }
 
-    /// Read back the findings of a batch, or of every batch.
+    /// Execute an arbitrary SQL batch on the underlying connection.
+    ///
+    /// This is primarily intended for testing (e.g., injecting fault triggers).
+    /// In production, use the structured methods (log_finding, log_quarantine, etc.).
+    pub fn execute_sql(&self, sql: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch(sql)?;
+        Ok(())
+    }
     pub fn get_findings(&self, batch_id: Option<&str>) -> Result<Vec<FindingRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = if batch_id.is_some() {

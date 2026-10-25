@@ -12,8 +12,10 @@ pub fn discover_devices(devices: &[PeerDevice]) -> Vec<PeerDevice> {
         if device.enabled {
             // Simple TCP connectivity check
             let addr = format!("{}:{}", device.address, device.port);
-            if TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(3)).is_ok() {
-                available.push(device.clone());
+            if let Ok(socket_addr) = addr.parse() {
+                if TcpStream::connect_timeout(&socket_addr, Duration::from_secs(3)).is_ok() {
+                    available.push(device.clone());
+                }
             }
         }
     }

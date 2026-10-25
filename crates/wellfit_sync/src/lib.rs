@@ -10,3 +10,12 @@ pub mod config;
 pub mod discovery;
 pub mod health;
 pub mod sync;
+
+#[cfg(test)]
+mod config_tests;
+#[cfg(test)]
+mod discovery_tests;
+#[cfg(test)]
+mod health_tests;
+#[cfg(test)]
+mod sync_tests;

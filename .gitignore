@@ -1,28 +1,57 @@
-# Python bytecode
-__pycache__/
-*.py[cod]
-*$py.class
+# Wellfit - Git ignore rules
+# OS Application Control policy blocks executables under desktop path,
+# so build artifacts are kept outside the repository.
 
-# SQLite databases & temp locks
-*.sqlite
-*.sqlite3
-*.sqlite-shm
-*.sqlite-wal
-*.db
-*.lock
-
-# Generated exception notifications (produced by MTRIX runs, never source)
-*_exceptions.json
-
-# Rust build artifacts
+# Build artifacts
 target/
 *.exe
+*.dll
 *.pdb
 
-# Environment
+# Database files
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Secrets and credentials
 .env
-.env.*
-!.env.example
-.venv
-env/
-venv/
+*.key
+*.pem
+*.secret
+*.token
+*.pfx
+*.p12
+
+# Local configuration (use .env.example / config.example.toml instead)
+wellfit.toml
+devices.json
+sync.toml
+*.local.toml
+
+# Data and output (synthetic demo inputs only; real data must not be committed)
+data/
+*.json
+*.csv
+!spec/fixtures/
+!spec/fixtures/**
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.tmp
+*.log
+
+# PowerShell artifacts
+*.ps1.bak

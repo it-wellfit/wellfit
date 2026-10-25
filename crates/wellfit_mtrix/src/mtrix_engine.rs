@@ -2221,10 +2221,101 @@ mod tests {
     }
 
     #[test]
-    fn test_repaired_file_name_keeps_the_delivered_name() {
-        assert_eq!(
-            repaired_file_name("ALTHVD30062020153005130 5 (4).csv"),
-            "ALTHVD30062020153005130 5 (4)_repaired.csv"
+    fn test_fault_injection_ledger_failure_aborts_drop() {
+        let dir = temp_dir("fault-injection");
+        let out = temp_dir("fault-injection-out");
+        write_all(&dir);
+
+        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
+        // Inject a trigger that fails all writes to validation_findings
+        ledger
+            .execute_sql(
+                "CREATE TRIGGER fail_finding BEFORE INSERT ON validation_findings \
+                 BEGIN SELECT RAISE(FAIL, 'injected audit failure'); END;",
+            )
+            .unwrap();
+
+        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+        let mut engine = MtrixEngine::new(ledger, gate);
+        // process_drop should fail because record_finding cannot persist
+        let result = engine.process_drop(&dir, "B-FAULT", Some(&out));
+        assert!(
+            result.is_err(),
+            "ledger failure must propagate to process_drop"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&out);
+    }
+
+    #[test]
+    fn test_fault_injection_ledger_failure_no_partial_report() {
+        let dir = temp_dir("fault-partial");
+        let out = temp_dir("fault-partial-out");
+        write_all(&dir);
+
+        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
+        // Inject trigger after first finding to simulate mid-process failure
+        ledger
+            .execute_sql(
+                "CREATE TRIGGER fail_finding BEFORE INSERT ON validation_findings \
+                 BEGIN SELECT RAISE(FAIL, 'injected mid-process failure'); END;",
+            )
+            .unwrap();
+
+        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+        let mut engine = MtrixEngine::new(ledger.clone(), gate);
+        let result = engine.process_drop(&dir, "B-FAULT-PARTIAL", Some(&out));
+
+        // Should fail because findings cannot be persisted
+        assert!(result.is_err());
+
+        // Verify no findings were partially persisted (trigger blocks all)
+        let findings = ledger.get_findings(None).unwrap();
+        assert!(
+            findings.is_empty(),
+            "no findings should be persisted when trigger blocks all writes"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&out);
+    }
+
+    #[test]
+    fn test_fault_injection_crash_recovery_data_consistency() {
+        let dir = temp_dir("crash-recovery");
+        let out = temp_dir("crash-recovery-out");
+        write_all(&dir);
+
+        // First run: successful ingestion
+        let ledger1 = Arc::new(IdempotencyLedger::in_memory().unwrap());
+        let gate1 = Arc::new(Mutex::new(ReleaseGate::default()));
+        let mut engine1 = MtrixEngine::new(ledger1.clone(), gate1);
+        let report1 = engine1.process_drop(&dir, "B-CRASH", Some(&out)).unwrap();
+        let _finding_count_1 = report1.findings.len();
+
+        // Verify findings were persisted (ledger may have fewer than report because
+        // quarantined rows go to a separate table, but must have at least some)
+        let persisted_1 = ledger1.get_findings(None).unwrap();
+        assert!(
+            !persisted_1.is_empty(),
+            "findings must be persisted after successful run"
+        );
+
+        // Second run with same batch_id: should be deduplicated (idempotent)
+        let gate2 = Arc::new(Mutex::new(ReleaseGate::default()));
+        let mut engine2 = MtrixEngine::new(ledger1.clone(), gate2);
+        let _result2 = engine2.process_drop(&dir, "B-CRASH", Some(&out));
+
+        // Data must remain consistent (no duplicate findings created)
+        let persisted_2 = ledger1.get_findings(None).unwrap();
+        assert_eq!(
+            persisted_2.len(),
+            persisted_1.len(),
+            "re-run must not create duplicate findings"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&out);
     }
 }

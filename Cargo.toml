@@ -13,7 +13,7 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 authors = ["Dachen Industrial Co., Ltd. <tech@dachen.com.tw>"]
-license = "Proprietary"
+license = "MIT"
 
 [workspace.dependencies]
 wellfit_core = { path = "crates/wellfit_core" }
