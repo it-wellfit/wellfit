@@ -91,8 +91,11 @@ enum Commands {
     /// Show the idempotency ledger state and the isolated records.
     Status {
         /// Ledger database path
-        #[arg(short, long, default_value = DEFAULT_LEDGER)]
+        #[arg(long, default_value = DEFAULT_LEDGER)]
         db: PathBuf,
+        /// Export validated data as JSON for knowledge ingestion (Phase 2)
+        #[arg(long)]
+        export_knowledge: Option<PathBuf>,
     },
     /// Wave 1 - Shopee inbound orders to the Fuyi ERP import batch.
     Shopee {
@@ -447,6 +450,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             strict,
             batch,
             db,
+            export_knowledge,
         } => run_mtrix(
             ui,
             dir,
@@ -455,6 +459,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             *strict,
             batch,
             db,
+            export_knowledge.as_deref(),
         ),
         Commands::Audit {
             data_dir,
@@ -695,6 +700,7 @@ fn run_mtrix(
     strict: bool,
     batch: &str,
     db: &Path,
+    export_knowledge: Option<&Path>,
 ) -> Result<i32, String> {
     let spin = Spinner::new("initialising MTRIX engine...", ui.color_enabled());
     let ledger = open_ledger(ui, db)?;
@@ -843,6 +849,50 @@ fn run_mtrix(
     }
 
     ok(ui, "MTRIX wave complete");
+
+    if let Some(path) = export_knowledge {
+        let mut docs = Vec::new();
+        for file in &report.files {
+            let doc_id = format!("WELLFIT-{}", file.prefix);
+            let verbatim = format!(
+                "File: {} | Rows: {}/{} accepted | Isolated: {} | Repairs: {} | Status: {}",
+                file.prefix,
+                file.rows_accepted,
+                file.rows_total,
+                file.rows_quarantined,
+                file.repairs_applied,
+                if file.rejected { "rejected" } else { "accepted" }
+            );
+            docs.push(serde_json::json!({
+                "doc_id": doc_id,
+                "title": format!("Wellfit MTRIX {} drop", file.prefix),
+                "version": "1.0",
+                "effective_from": "2026-01-01",
+                "verbatim_text": verbatim,
+                "section": "1",
+                "permissions": ["viewer", "editor"]
+            }));
+        }
+        if !report.findings.is_empty() {
+            let findings_text: String = report.findings.iter()
+                .map(|f| format!("[{}] {} (row {}): {}", f.rule, f.message, f.row, f.severity))
+                .collect::<Vec<_>>()
+                .join("\n");
+            docs.push(serde_json::json!({
+                "doc_id": "WELLFIT-FINDINGS",
+                "title": "Wellfit MTRIX Validation Findings",
+                "version": "1.0",
+                "effective_from": "2026-01-01",
+                "verbatim_text": findings_text,
+                "section": "1",
+                "permissions": ["viewer", "editor"]
+            }));
+        }
+        let json = serde_json::to_string_pretty(&docs).map_err(|e| format!("export knowledge: {e}"))?;
+        fs::write(path, json).map_err(|e| format!("write export: {e}"))?;
+        info(ui, &format!("exported {} knowledge documents to {}", docs.len(), path.display()));
+    }
+
     Ok(0)
 }
 
