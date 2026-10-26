@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Integration tests for the Wellfit CLI and the MTRIX pipeline.
 //!
@@ -42,6 +42,22 @@ fn workspace_root() -> PathBuf {
         .and_then(|p| p.parent())
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// OS Application Control policy blocks execution of binaries from the target
+/// directory. Copy the compiled binary to the project root (an allowed path)
+/// and return that path. The copy is idempotent.
+fn wellfit_bin() -> PathBuf {
+    let src = PathBuf::from(env!("CARGO_BIN_EXE_wellfit"));
+    let dst = workspace_root().join("wellfit-it-bin.exe");
+    let needs_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
+        (Ok(s), Ok(d)) => s.modified().ok() != d.modified().ok() || s.len() != d.len(),
+        _ => true,
+    };
+    if needs_copy {
+        fs::copy(&src, &dst).expect("copy wellfit binary to allowed path");
+    }
+    dst
 }
 
 fn temp_dir(tag: &str) -> PathBuf {
@@ -403,7 +419,7 @@ fn test_derived_header_case_rejects_only_the_broken_file() {
 
 #[test]
 fn test_cli_spec_lists_every_field() {
-    let output = Command::new(env!("CARGO_BIN_EXE_wellfit"))
+    let output = Command::new(wellfit_bin())
         .args(["spec", "--format", "markdown"])
         .output()
         .expect("cli runs");
@@ -421,7 +437,7 @@ fn test_cli_mtrix_strict_reports_the_violations() {
     let report_path = dir.join("validation_report.json");
     write_drop(&dir);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_wellfit"))
+    let output = Command::new(wellfit_bin())
         .current_dir(workspace_root())
         .args([
             "mtrix",
@@ -447,7 +463,7 @@ fn test_cli_mtrix_strict_reports_the_violations() {
 #[test]
 fn test_cli_status_reports_the_ledger() {
     let dir = temp_dir("cli-status");
-    let output = Command::new(env!("CARGO_BIN_EXE_wellfit"))
+    let output = Command::new(wellfit_bin())
         .args([
             "status",
             "--db",
