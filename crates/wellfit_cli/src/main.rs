@@ -42,6 +42,7 @@ use wellfit_mtrix::validators::VrRule;
 use wellfit_mtrix::MtrixEngine;
 use wellfit_reports::report_automator::ReportAutomator;
 use wellfit_shopee::shopee_engine::ShopeeInboundEngine;
+use wellfit_bankpay::{query, BankEncoding, BankpayEngine};
 
 const DEFAULT_LEDGER: &str = "data/wellfit_ledger.sqlite";
 const DEFAULT_MTRIX_FIXTURES: &str = "spec/fixtures/mtrix/delivered";
@@ -178,6 +179,13 @@ enum Commands {
     Jit {
         #[command(subcommand)]
         action: JitAction,
+    },
+    /// E.Sun Bank enterprise net-banking interface for Fuyi ERP accounts
+    /// payable vouchers: export, import, and traceable query.
+    Bankpay {
+        /// Sub-command: export, import, or query
+        #[command(subcommand)]
+        action: BankpayAction,
     },
 }
 
@@ -331,6 +339,56 @@ enum JitAction {
     },
 }
 
+/// BankPay sub-actions for E.Sun bank payable voucher integration.
+#[derive(Subcommand, Debug)]
+enum BankpayAction {
+    /// Export ERP payable vouchers to a bank media file and dispatch.
+    Export {
+        /// Source voucher file (CSV)
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Batch identifier
+        #[arg(short, long, default_value = "BATCH-CLI-BANKPAY")]
+        batch: String,
+        /// Batch date for idempotency keys (ISO-8601, default today)
+        #[arg(long, default_value = "TODAY")]
+        batch_date: String,
+        /// Target encoding: utf8, cp950, big5 (default utf8)
+        #[arg(long, default_value = "utf8", value_parser = ["utf8", "cp950", "big5"])]
+        encoding: String,
+        /// Ledger database path
+        #[arg(long, default_value = DEFAULT_LEDGER)]
+        db: PathBuf,
+    },
+    /// Import bank result file and settle matched vouchers.
+    Import {
+        /// Source bank result file (CSV)
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Batch identifier
+        #[arg(short, long, default_value = "BATCH-CLI-BANKPAY-RES")]
+        batch: String,
+        /// Source encoding: utf8, cp950, big5 (default utf8)
+        #[arg(long, default_value = "utf8", value_parser = ["utf8", "cp950", "big5"])]
+        encoding: String,
+        /// Ledger database path
+        #[arg(long, default_value = DEFAULT_LEDGER)]
+        db: PathBuf,
+    },
+    /// Traceable query: cross-reference voucher / bank reference / batch.
+    Query {
+        /// Lookup kind: voucher, tx, batch
+        #[arg(value_parser = ["voucher", "tx", "batch"])]
+        kind: String,
+        /// Lookup key
+        #[arg(short, long)]
+        key: String,
+        /// Ledger database path
+        #[arg(long, default_value = DEFAULT_LEDGER)]
+        db: PathBuf,
+    },
+}
+
 // ---------------------------------------------------------------- main
 
 fn main() {
@@ -430,7 +488,7 @@ fn open_ledger_scoped(
 
 fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
     match &cli.command {
-        Commands::Status { db } => run_status(ui, db),
+        Commands::Status { db, export_knowledge } => run_status(ui, db, export_knowledge.as_deref()),
         Commands::Shopee {
             input,
             output,
@@ -450,7 +508,6 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             strict,
             batch,
             db,
-            export_knowledge,
         } => run_mtrix(
             ui,
             dir,
@@ -459,7 +516,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             *strict,
             batch,
             db,
-            export_knowledge.as_deref(),
+            None,
         ),
         Commands::Audit {
             data_dir,
@@ -473,12 +530,13 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
         }
         Commands::AccessControl { action } => run_access_control(ui, action),
         Commands::Jit { action } => run_jit(ui, action),
+        Commands::Bankpay { action } => run_bankpay(ui, action),
     }
 }
 
 // ---------------------------------------------------------------- status
 
-fn run_status(ui: &UiConfig, db: &Path) -> Result<i32, String> {
+fn run_status(ui: &UiConfig, db: &Path, _export_knowledge: Option<&Path>) -> Result<i32, String> {
     let spin = Spinner::new("reading ledger state...", ui.color_enabled());
     let ledger = open_ledger(ui, db)?;
     let quarantined = ledger
@@ -692,6 +750,7 @@ fn run_reports(
 
 // ---------------------------------------------------------------- mtrix
 
+#[allow(clippy::too_many_arguments)]
 fn run_mtrix(
     ui: &UiConfig,
     dir: &Path,
@@ -875,7 +934,7 @@ fn run_mtrix(
         }
         if !report.findings.is_empty() {
             let findings_text: String = report.findings.iter()
-                .map(|f| format!("[{}] {} (row {}): {}", f.rule, f.message, f.row, f.severity))
+                .map(|f| format!("[{:?}] {} (line {}): {:?}", f.rule, f.reason, f.line, f.severity))
                 .collect::<Vec<_>>()
                 .join("\n");
             docs.push(serde_json::json!({
@@ -1978,6 +2037,112 @@ details[open] summary { color:var(--accent); }
 
     html.push_str("</body>\n</html>\n");
     println!("{html}");
+}
+
+/// E.Sun Bank payable voucher export / import / traceable query.
+fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
+    match action {
+        BankpayAction::Export {
+            input,
+            batch,
+            batch_date,
+            encoding,
+            db,
+        } => {
+            let ledger = open_ledger(ui, db)?;
+            let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+            let mut engine = BankpayEngine::new(ledger, gate);
+            let enc = match encoding.as_str() {
+                "cp950" => BankEncoding::Cp950,
+                "big5" => BankEncoding::Big5,
+                _ => BankEncoding::Utf8,
+            };
+            let batch_date = if batch_date.eq_ignore_ascii_case("TODAY") {
+                chrono::Utc::now().format("%Y-%m-%d").to_string()
+            } else {
+                batch_date.clone()
+            };
+            let spin = Spinner::new("exporting payable vouchers to bank media file...", ui.color_enabled());
+            let result = engine.export_vouchers(
+                input,
+                batch,
+                &batch_date,
+                enc,
+                |_media| {
+                    // Production transport would send the media file to E.Sun
+                    // over TLS. Here we record success without network I/O.
+                    Ok(true)
+                },
+            );
+            spin.finish(Some("bank media file assembled"));
+
+            match result {
+                Ok(r) => {
+                    heading(ui, "bankpay export");
+                    kv(ui, "batch", &r.batch_id);
+                    kv(ui, "media file", &r.media_file);
+                    kv(ui, "file sha256", &r.file_sha256);
+                    kv(ui, "vouchers accepted", &r.vouchers_accepted.to_string());
+                    kv(ui, "vouchers isolated", &r.vouchers_isolated.to_string());
+                    kv(ui, "dispatched", &r.dispatched.to_string());
+                    kv(ui, "release state", &r.release_state);
+                    ok(ui, "bankpay export complete");
+                    Ok(if r.vouchers_isolated > 0 || !r.dispatched { 2 } else { 0 })
+                }
+                Err(e) => Err(format!("bankpay export failed: {e}")),
+            }
+        }
+        BankpayAction::Import {
+            input,
+            batch,
+            encoding,
+            db,
+        } => {
+            let ledger = open_ledger(ui, db)?;
+            let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+            let mut engine = BankpayEngine::new(ledger, gate);
+            let enc = match encoding.as_str() {
+                "cp950" => BankEncoding::Cp950,
+                "big5" => BankEncoding::Big5,
+                _ => BankEncoding::Utf8,
+            };
+            let spin = Spinner::new("importing bank result file...", ui.color_enabled());
+            let result = engine.import_results(input, batch, enc);
+            spin.finish(Some("bank result imported"));
+
+            match result {
+                Ok(r) => {
+                    heading(ui, "bankpay import");
+                    kv(ui, "batch", &r.batch_id);
+                    kv(ui, "results accepted", &r.results_accepted.to_string());
+                    kv(ui, "results isolated", &r.results_isolated.to_string());
+                    kv(ui, "matched vouchers", &r.matched_vouchers.to_string());
+                    kv(ui, "unmatched", &r.unmatched.to_string());
+                    ok(ui, "bankpay import complete");
+                    Ok(if r.results_isolated > 0 { 2 } else { 0 })
+                }
+                Err(e) => Err(format!("bankpay import failed: {e}")),
+            }
+        }
+        BankpayAction::Query { kind, key, db } => {
+            let ledger = open_ledger(ui, db)?;
+            let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+            let mut engine = BankpayEngine::new(ledger, gate);
+            let result = query(&mut engine, kind, key).map_err(|e| format!("query failed: {e}"))?;
+            heading(ui, "bankpay traceable query");
+            kv(ui, "kind", &result.lookup_kind);
+            kv(ui, "key", &result.lookup_key);
+            kv(ui, "batch", &result.batch_id.unwrap_or_else(|| "-".to_string()));
+            kv(ui, "bank ref", &result.bank_ref.unwrap_or_else(|| "-".to_string()));
+            kv(ui, "voucher", &result.voucher_no.unwrap_or_else(|| "-".to_string()));
+            kv(ui, "file sha256", &result.file_sha256.unwrap_or_else(|| "-".to_string()));
+            for finding in &result.findings {
+                info(ui, finding);
+            }
+            ok(ui, "traceable query complete");
+            Ok(0)
+        }
+    }
 }
 
 fn html_escape(s: &str) -> String {

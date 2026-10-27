@@ -145,3 +145,16 @@ git bundle verify backup-*.bundle
 - Application Control policy: 使用 `%LOCALAPPDATA%\Temp\wellfit-target`
 - CR-only 行尾: 使用 `split_lines`（支援 LF/CRLF/CR）
 - 隔離列行號: 使用 row_lines 同步機制
+
+## 技能參考：AI 時代嚴謹軟體工程技能包 v1.0.0
+
+安裝位置：`.kilo/skills/rigorous-skill-pack/`（工作區層級，不覆蓋本檔）。
+
+本技能包提供 15 個獨立技能與 12 個評估案例，總控層為 `00-orchestration`。按需載入對應技能，不直接覆寫本 `AGENTS.md` 或任何專案規則。所有完成判定均須有實際證據，不僅接受 AI 自稱。
+
+參考檔案：
+- `MASTER-WORKFLOW.md`：G0–G10 端到端工程總控流程
+- `skills/00-orchestration/SKILL.md`：總控層與停止條件
+- `evals/workflow-evals/cases.json`：12 個評估案例
+- `scripts/validate_pack.py`：套件結構驗證
+- `docs/source-registry.md`：來源與授權注意事項

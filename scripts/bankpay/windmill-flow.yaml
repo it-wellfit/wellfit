@@ -1,0 +1,65 @@
+# Wellfit BankPay Windmill flow - E.Sun bank payable voucher integration
+# Triggered off-peak (02:00-06:00) per the FLAPS-RPA-2026 operating schedule.
+# Application Control: native binary only, no Docker, no commercial RPA.
+
+version: 1
+name: wellfit-bankpay-daily
+description: >
+  Daily E.Sun bank payable voucher export/import with idempotency and
+  traceable query. Runs against the wellfit native binary.
+schedule:
+  cron: "0 2 * * *"        # 02:00 daily (off-peak)
+  timezone: "Asia/Taipei"
+  catchup: false
+
+parameters:
+  wellfit_bin: "%LOCALAPPDATA%\\Temp\\wellfit-target\\release\\wellfit.exe"
+  db: "data\\wellfit_ledger.sqlite"
+  input_vouchers: "data\\ap_vouchers_export.csv"
+  input_results: "data\\bank_result_import.csv"
+  batch_export: "BATCH-BANKPAY-{{ today | date('yyyyMMdd') }}"
+  batch_import: "BATCH-BANKPAY-RES-{{ today | date('yyyyMMdd') }}"
+  encoding: "utf8"
+
+steps:
+  - id: export-vouchers
+    type: powershell
+    script: scripts\\bankpay\\Export-PayableVouchers.ps1
+    args:
+      - --WellfitBin=${wellfit_bin}
+      - --Db=${db}
+      - --Input=${input_vouchers}
+      - --Batch=${batch_export}
+      - --Encoding=${encoding}
+    on_error: alert
+
+  - id: import-results
+    type: powershell
+    script: scripts\\bankpay\\Import-BankResults.ps1
+    args:
+      - --WellfitBin=${wellfit_bin}
+      - --Db=${db}
+      - --Input=${input_results}
+      - --Batch=${batch_import}
+      - --Encoding=${encoding}
+    depends_on: [export-vouchers]
+    on_error: alert
+
+  - id: traceability-smoke
+    type: powershell
+    script: scripts\\bankpay\\Invoke-BankpayQuery.ps1
+    args:
+      - --WellfitBin=${wellfit_bin}
+      - --Db=${db}
+      - --Kind=batch
+      - --Key=${batch_export}
+    depends_on: [import-results]
+    on_error: warn
+
+alerts:
+  on_failure:
+    - channel: teams
+      message: "Wellfit BankPay daily run failed - batch ${batch_export}"
+  on_isolated:
+    - channel: email
+      message: "Isolated records detected - review quarantine log"

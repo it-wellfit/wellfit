@@ -1,0 +1,178 @@
+[
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 2,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7893249911649",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 2,
+    "suggested_action": "please synchronize batch code '7893249911649' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 3,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7893249464367",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 3,
+    "suggested_action": "please synchronize batch code '7893249464367' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 4,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7891266181649",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 4,
+    "suggested_action": "please synchronize batch code '7891266181649' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 5,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7890541458018",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 5,
+    "suggested_action": "please synchronize batch code '7890541458018' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 6,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7891266542075",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 6,
+    "suggested_action": "please synchronize batch code '7891266542075' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 7,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7893249603650",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 7,
+    "suggested_action": "please synchronize batch code '7893249603650' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 8,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7893249405896",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 8,
+    "suggested_action": "please synchronize batch code '7893249405896' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 9,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7893249058894",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 9,
+    "suggested_action": "please synchronize batch code '7893249058894' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-08",
+    "orphan_key": "7AC",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 10,
+    "suggested_action": "please synchronize customer code '7AC' to ALTHCI customer master",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-09",
+    "orphan_key": "7890541465122",
+    "file": "ALTHVD30062020153005130 5 (4).csv",
+    "line": 10,
+    "suggested_action": "please synchronize batch code '7890541465122' to ALTHES and ALTHPD masters",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-11",
+    "orphan_key": "7890541735003",
+    "file": "ALTHES30062020153005130 2 (3).csv",
+    "line": 2,
+    "suggested_action": "please confirm master data synchronization status with the business side",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-11",
+    "orphan_key": "7891224813520",
+    "file": "ALTHES30062020153005130 2 (3).csv",
+    "line": 3,
+    "suggested_action": "please confirm master data synchronization status with the business side",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-11",
+    "orphan_key": "7909690254775",
+    "file": "ALTHES30062020153005130 2 (3).csv",
+    "line": 4,
+    "suggested_action": "please confirm master data synchronization status with the business side",
+    "notified_at": "1793074683"
+  },
+  {
+    "rule_id": "VR-11",
+    "orphan_key": "7909690254782",
+    "file": "ALTHES30062020153005130 2 (3).csv",
+    "line": 5,
+    "suggested_action": "please confirm master data synchronization status with the business side",
+    "notified_at": "1793074683"
+  }
+]

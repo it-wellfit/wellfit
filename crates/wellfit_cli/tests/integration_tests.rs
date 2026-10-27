@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Integration tests for the Wellfit CLI and the MTRIX pipeline.
 //!
@@ -49,7 +49,11 @@ fn workspace_root() -> PathBuf {
 /// and return that path. The copy is idempotent.
 fn wellfit_bin() -> PathBuf {
     let src = PathBuf::from(env!("CARGO_BIN_EXE_wellfit"));
-    let dst = workspace_root().join("wellfit-it-bin.exe");
+    let dst = std::env::temp_dir().join(format!(
+        "wellfit-it-bin-{}-{:?}.exe",
+        std::process::id(),
+        std::thread::current().id()
+    ));
     let needs_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
         (Ok(s), Ok(d)) => s.modified().ok() != d.modified().ok() || s.len() != d.len(),
         _ => true,

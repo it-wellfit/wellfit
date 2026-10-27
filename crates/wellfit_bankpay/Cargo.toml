@@ -1,0 +1,16 @@
+[package]
+name = "wellfit_bankpay"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+wellfit_core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+encoding_rs.workspace = true
+clap.workspace = true

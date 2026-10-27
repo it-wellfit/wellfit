@@ -6,6 +6,7 @@ members = [
     "crates/wellfit_mtrix",
     "crates/wellfit_cli",
     "crates/wellfit_sync",
+    "crates/wellfit_bankpay",
 ]
 resolver = "2"
 
@@ -20,6 +21,7 @@ wellfit_core = { path = "crates/wellfit_core" }
 wellfit_reports = { path = "crates/wellfit_reports" }
 wellfit_shopee = { path = "crates/wellfit_shopee" }
 wellfit_mtrix = { path = "crates/wellfit_mtrix" }
+wellfit_bankpay = { path = "crates/wellfit_bankpay" }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
@@ -29,3 +31,4 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 regex = "1.10"
 uuid = { version = "1.8", features = ["v4"] }
+encoding_rs = "0.8"
