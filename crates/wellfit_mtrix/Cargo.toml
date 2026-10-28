@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name = "wellfit_mtrix"
 version.workspace = true
 edition.workspace = true
@@ -9,3 +9,8 @@ license.workspace = true
 wellfit_core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+wellfit_core = { workspace = true }
+

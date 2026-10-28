@@ -1,0 +1,138 @@
+# MTRIX Validation Rules (VR-01 .. VR-15)
+# Externalized from wellfit_mtrix/src/validators.rs
+# Format: TOML
+
+[[rules]]
+id = "VR-01"
+name = "file_name"
+scope = "All"
+severity = "Error"
+action = "FileRejected"
+description = "File name prefix, timestamp and delimiter"
+manual_page = 3
+
+[[rules]]
+id = "VR-02"
+name = "header"
+scope = "All"
+severity = "Error"
+action = "FileRejected"
+description = "Header names, order and column count"
+manual_page = 5
+
+[[rules]]
+id = "VR-03"
+name = "calendar_date"
+scope = "All"
+severity = "Error"
+action = "RowQuarantined"
+description = "Date format and calendar validity (YYYYMMDD)"
+manual_page = 7
+
+[[rules]]
+id = "VR-04"
+name = "document_type"
+scope = "Sales"
+severity = "Error"
+action = "RowQuarantined"
+description = "Sales document type value set (INVOICE, CREDIT_NOTE, etc.)"
+manual_page = 9
+
+[[rules]]
+id = "VR-05"
+name = "duplicate_transaction"
+scope = "Sales"
+severity = "Warning"
+action = "Aggregated"
+description = "Duplicate sales transaction aggregation"
+manual_page = 11
+
+[[rules]]
+id = "VR-06"
+name = "negative_stock"
+scope = "Inventory"
+severity = "Warning"
+action = "Repaired"
+description = "Negative inventory quantity clamped to zero"
+manual_page = 13
+
+[[rules]]
+id = "VR-07"
+name = "barcode"
+scope = "Product"
+severity = "Error"
+action = "RowQuarantined"
+description = "EAN13/DUN14 barcode validation"
+manual_page = 15
+
+[[rules]]
+id = "VR-08"
+name = "customer_exists"
+scope = "Sales"
+severity = "Error"
+action = "RowQuarantined"
+description = "Cross-file: sales customer exists in customer master"
+manual_page = 17
+
+[[rules]]
+id = "VR-09"
+name = "item_exists"
+scope = "Sales"
+severity = "Error"
+action = "RowQuarantined"
+description = "Cross-file: sales item exists in inventory and product master"
+manual_page = 19
+
+[[rules]]
+id = "VR-10"
+name = "salesperson_exists"
+scope = "Sales"
+severity = "Error"
+action = "RowQuarantined"
+description = "Cross-file: salesperson exists in sales force master for same customer"
+manual_page = 21
+
+[[rules]]
+id = "VR-11"
+name = "inventory_item_exists"
+scope = "Inventory"
+severity = "Error"
+action = "RowQuarantined"
+description = "Cross-file: inventory item exists in product master"
+manual_page = 23
+
+[[rules]]
+id = "VR-12"
+name = "currency_group"
+scope = "All"
+severity = "Info"
+action = "Listed"
+description = "Acceptance: record counts reconciled against management report"
+manual_page = 25
+
+[[rules]]
+id = "VR-13"
+name = "water_level"
+scope = "Inventory"
+severity = "Warning"
+action = "Listed"
+description = "Water-level alignment: inventory snapshot belongs to same movement period"
+manual_page = 18
+
+[[rules]]
+id = "VR-14"
+name = "orphan_customer"
+scope = "SalesForce"
+severity = "Warning"
+action = "Listed"
+description = "Cross-file: sales force customer exists in customer master"
+manual_page = 34
+
+[[rules]]
+id = "VR-15"
+name = "field_format"
+scope = "All"
+severity = "Warning"
+action = "Listed"
+description = "Field format validation: per-field specific validations (ISO 3166-1, EAN13, postal code)"
+manual_page = 36

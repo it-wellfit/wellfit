@@ -1,0 +1,77 @@
+{
+  "version": "1.0",
+  "total_fields": 56,
+  "files": {
+    "ALTHCI": {
+      "prefix": "ALTHCI",
+      "role": "Customer",
+      "manual_page": 3,
+      "fields": [
+        {"seq": 1, "source_name": "CUSTOMER_CODE", "canonical_name": "customer_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 2, "source_name": "CUSTOMER_NAME", "canonical_name": "customer_name", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 3, "source_name": "DIST_ID", "canonical_name": "dist_id", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-005"},
+        {"seq": 4, "source_name": "STORE_TYPE", "canonical_name": "store_type", "tier": "T2", "mandatory": false, "issue_id": "MTRIX-006"},
+        {"seq": 5, "source_name": "VENDOR_PREFIX", "canonical_name": "vendor_prefix", "tier": "T2", "mandatory": false, "issue_id": "G-11"},
+        {"seq": 6, "source_name": "ADDRESS", "canonical_name": "address", "tier": "T1", "mandatory": false, "issue_id": null},
+        {"seq": 7, "source_name": "CITY", "canonical_name": "city", "tier": "T1", "mandatory": false, "issue_id": null},
+        {"seq": 8, "source_name": "STATE", "canonical_name": "state", "tier": "T1", "mandatory": false, "issue_id": null},
+        {"seq": 9, "source_name": "ZIP_CODE", "canonical_name": "zip_code", "tier": "T1", "mandatory": true, "issue_id": "MTRIX-001"},
+        {"seq": 10, "source_name": "COUNTRY", "canonical_name": "country", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 11, "source_name": "COUNTRY_ISO", "canonical_name": "country_iso", "tier": "T1", "mandatory": true, "issue_id": null}
+      ]
+    },
+    "ALTHES": {
+      "prefix": "ALTHES",
+      "role": "Inventory",
+      "manual_page": 5,
+      "fields": [
+        {"seq": 1, "source_name": "ITEM_CODE", "canonical_name": "item_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 2, "source_name": "ITEM_NAME", "canonical_name": "item_name", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 3, "source_name": "EAN13", "canonical_name": "ean13", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-007"},
+        {"seq": 4, "source_name": "DUN14", "canonical_name": "dun14", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-007"},
+        {"seq": 5, "source_name": "QUANTITY_STOCK", "canonical_name": "quantity_stock", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 6, "source_name": "UNIT", "canonical_name": "unit", "tier": "T2", "mandatory": false, "issue_id": "MTRIX-024"}
+      ]
+    },
+    "ALTHPD": {
+      "prefix": "ALTHPD",
+      "role": "Product",
+      "manual_page": 7,
+      "fields": [
+        {"seq": 1, "source_name": "PRODUCT_CODE", "canonical_name": "product_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 2, "source_name": "PRODUCT_NAME", "canonical_name": "product_name", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 3, "source_name": "VENDOR_CODE", "canonical_name": "vendor_code", "tier": "T1", "mandatory": false, "issue_id": "G-11"},
+        {"seq": 4, "source_name": "EAN13", "canonical_name": "ean13", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-007"},
+        {"seq": 5, "source_name": "DUN14", "canonical_name": "dun14", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-007"},
+        {"seq": 6, "source_name": "UNIT_PRICE", "canonical_name": "unit_price", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-024"}
+      ]
+    },
+    "ALTHVD": {
+      "prefix": "ALTHVD",
+      "role": "Sales",
+      "manual_page": 9,
+      "fields": [
+        {"seq": 1, "source_name": "DOCUMENT_TYPE", "canonical_name": "document_type", "tier": "T1", "mandatory": true, "issue_id": "MTRIX-004"},
+        {"seq": 2, "source_name": "DOCUMENT_NUMBER", "canonical_name": "document_number", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 3, "source_name": "CUSTOMER_CODE", "canonical_name": "customer_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 4, "source_name": "SALESPERSON_CODE", "canonical_name": "salesperson_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 5, "source_name": "ITEM_CODE", "canonical_name": "item_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 6, "source_name": "QUANTITY", "canonical_name": "quantity", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 7, "source_name": "UNIT_PRICE", "canonical_name": "unit_price", "tier": "T1", "mandatory": false, "issue_id": "MTRIX-024"},
+        {"seq": 8, "source_name": "CURRENCY", "canonical_name": "currency", "tier": "T1", "mandatory": true, "issue_id": "G-07"}
+      ]
+    },
+    "ALTHFV": {
+      "prefix": "ALTHFV",
+      "role": "SalesForce",
+      "manual_page": 11,
+      "fields": [
+        {"seq": 1, "source_name": "CUSTOMER_CODE", "canonical_name": "customer_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 2, "source_name": "SALESPERSON_CODE", "canonical_name": "salesperson_code", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 3, "source_name": "SALESPERSON_NAME", "canonical_name": "salesperson_name", "tier": "T1", "mandatory": true, "issue_id": null},
+        {"seq": 4, "source_name": "REGION", "canonical_name": "region", "tier": "T2", "mandatory": false, "issue_id": null},
+        {"seq": 5, "source_name": "STATUS", "canonical_name": "status", "tier": "T2", "mandatory": false, "issue_id": null}
+      ]
+    }
+  }
+}

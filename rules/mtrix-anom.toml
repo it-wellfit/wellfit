@@ -1,0 +1,87 @@
+# MTRIX Repair Rules (ANOM-01 .. ANOM-12)
+# Externalized from wellfit_mtrix/src/repairs.rs
+# Format: TOML
+
+[[repairs]]
+id = "ANOM-01"
+name = "trailing_empty_columns"
+scope = "All"
+description = "Remove trailing empty columns from header"
+manual_page = 5
+
+[[repairs]]
+id = "ANOM-02"
+name = "header_normalization"
+scope = "All"
+description = "Normalize header names (trim, uppercase)"
+manual_page = 5
+
+[[repairs]]
+id = "ANOM-03"
+name = "alias_mapping"
+scope = "All"
+description = "Map header aliases to canonical names"
+manual_page = 5
+
+[[repairs]]
+id = "ANOM-04"
+name = "barcode_leading_zeros"
+scope = "Product"
+description = "Preserve leading zeros in barcode fields"
+manual_page = 15
+
+[[repairs]]
+id = "ANOM-05"
+name = "vendor_country_prefix"
+scope = "Product"
+description = "Split vendor country prefix from vendor code"
+manual_page = 17
+
+[[repairs]]
+id = "ANOM-06"
+name = "dist_id_mask"
+scope = "Customer"
+description = "Remove dot mask from DIST_ID"
+manual_page = 19
+
+[[repairs]]
+id = "ANOM-07"
+name = "store_type_alias"
+scope = "Customer"
+description = "Normalize STORE_TYPE aliases (ONLINNE -> ONLINE)"
+manual_page = 21
+
+[[repairs]]
+id = "ANOM-08"
+name = "negative_stock_clamp"
+scope = "Inventory"
+description = "Clamp negative inventory to zero"
+manual_page = 23
+
+[[repairs]]
+id = "ANOM-09"
+name = "barcode_repair_scope"
+scope = "All"
+description = "Barcode repair does not touch identifier columns"
+manual_page = 25
+
+[[repairs]]
+id = "ANOM-10"
+name = "duplicate_aggregation"
+scope = "Sales"
+description = "Aggregate duplicate sales transactions"
+manual_page = 27
+
+[[repairs]]
+id = "ANOM-11"
+name = "repair_log"
+scope = "All"
+description = "Repair log with before/after values"
+manual_page = 29
+
+[[repairs]]
+id = "ANOM-12"
+name = "header_deviations"
+scope = "All"
+description = "Log header deviations against original manual"
+manual_page = 31
