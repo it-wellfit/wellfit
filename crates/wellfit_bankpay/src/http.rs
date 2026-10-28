@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! HTTP client for communicating with the E.Sun `銀企直連安控元件`
 //! (security component) on port 8443 (internal) / 9443 (external).
@@ -62,6 +62,10 @@ impl EsunHttpClient {
         Req: serde::Serialize,
         Resp: serde::de::DeserializeOwned + Default,
     {
+        // Enforce HTTPS for production security
+        if !self.config.base_url.starts_with("https://") && !self.config.base_url.starts_with("http://127.0.0.1") && !self.config.base_url.starts_with("http://localhost") {
+            return Err(format!("base URL must use HTTPS in production: {}", self.config.base_url));
+        }
         let url = format!("{}{}", self.config.base_url, path);
         let json_body =
             serde_json::to_string(body).map_err(|e| format!("serialize request: {e}"))?;
