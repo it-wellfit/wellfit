@@ -100,7 +100,7 @@ ERP (API) Server ──8443──► Release-Manager Workstation ──9443─�
 
 ## 6. Backup & Recovery
 
-- Ledger SQLite database backed up daily (`scripts/bankpay/Backup-Bankpay.ps1`).
+- Ledger SQLite database backed up daily via `scripts/bankpay/Backup-Bankpay.ps1` (script present; daily scheduling/deployment pending).
 - Media files retained per retention policy; SHA-256 hash in ledger for integrity.
 - Restore drill: clone backup bundle, run `cargo build`, verify ledger queries.
 

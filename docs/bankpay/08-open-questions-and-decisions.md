@@ -52,9 +52,9 @@
 ## 4. Pending Actions
 
 1. Resolve OQ-E3 with E.Sun account manager (sandbox credentials).
-2. Implement HTTP client with certificate pinning (gap).
+2. Implement HTTP client with certificate pinning (in progress — `http.rs` `EsunHttpClient` exists; pinning pending).
 3. Implement RSA/signing layer (delegated to component — verify signing flow).
-4. Add fixed-width 422-char media assembler (gap G-MEDIA).
+4. Add fixed-width 422-char media assembler (gap G-MEDIA) — implemented in `media.rs` (`assemble_twd_media_file`).
 5. Complete TWD payment batch support (PayType 02/03 → paymentType 1/2).
 6. Complete status code mapping (06, 99 → 1006/9999).
 7. Implement cancellation flow.

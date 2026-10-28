@@ -16,7 +16,7 @@
 | Contract tests | V2.8 field spec | Field length/required/format validation |
 | Manual UAT | Bank sandbox (OQ-E3) | Real security component |
 
-Current baseline: **18 unit tests** in `wellfit_bankpay` (encoding round-trip, export dedup, isolation, media SHA-256, import findings, traceability chain, release gate).
+Current baseline: **32 unit tests** in `wellfit_bankpay` (encoding round-trip, export dedup, isolation, media SHA-256, import findings, traceability chain, release gate).
 
 ---
 
@@ -94,7 +94,7 @@ Current baseline: **18 unit tests** in `wellfit_bankpay` (encoding round-trip, e
 ## 9. Acceptance Criteria
 
 - [ ] All 8 APIs implemented against mock security component.
-- [ ] All unit tests (≥18) green; clippy zero warnings.
+- [ ] All unit tests (≥32) green; clippy zero warnings.
 - [ ] Full result code table (910000–999999) handled.
 - [ ] Full transaction status table (0000–9999) mapped.
 - [ ] TWD payment fields validated per V2.8 lengths/required.

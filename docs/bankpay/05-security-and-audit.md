@@ -36,7 +36,7 @@
 
 - Protocol: HTTPS, TLS 1.2+ only.
 - Mode: **2-Way SSL** — client certificate + server certificate mutual verification.
-- Certificate pinning on the ERP HTTP client (gap: implement in `client.rs`).
+- Certificate pinning on the ERP HTTP client (gap: implement in `http.rs` (`EsunHttpClient`)).
 - `Source-System` header carries agreed `SourceSystemId`.
 - eToken signing delegated to the security component; ERP never holds the private key.
 
@@ -122,7 +122,7 @@ All state transitions (`DraftGenerated → VerifiedPass/Quarantined → Authoriz
 ## 7. Data Protection
 
 - No secrets (eToken, private keys, enable codes) stored in ERP database or logs.
-- Certificate files stored under `docs/bankpay/references/` gitignored for secrets/certs.
+- Certificate files are never committed; they are supplied via secret store / OS certificate store (paths in config, e.g. `certs/`), gitignored. `docs/bankpay/references/` holds bank technical docs only (PDF/PPT), not secrets.
 - Payloads with PII (notifyEmail, payeeId) logged only as hashes where possible; full payload retention governed by retention policy.
 - RBAC: finance role gated for payment release; release manager role for eToken approval.
 

@@ -32,11 +32,14 @@
 Wellfit/crates/wellfit_bankpay/
 ├── src/
 │   ├── lib.rs          # public re-exports
+│   ├── api.rs          # V2.8 API request/response models
 │   ├── bankpay.rs      # engine, domain models, media assembly
 │   ├── encoding.rs     # CP950/Big5/Big5-HKSCS/UTF-8 conversion
+│   ├── http.rs         # EsunHttpClient (ureq + rustls, 2-way SSL)
+│   ├── media.rs        # 422-char fixed-width BIG-5 media assembler
 │   ├── query.rs        # traceable query (voucher↔tx↔batch↔sha256)
 │   └── release.rs      # ReleaseGate wrappers
-└── tests/              # 18 unit tests
+└── tests/              # 32 unit tests
 ```
 
 ### 1.2 Dependencies
@@ -44,7 +47,7 @@ Wellfit/crates/wellfit_bankpay/
 - `wellfit_core`: `ColumnContract`, `IdempotencyLedger`, `ReleaseGate`, `ScaledDecimal`, `Finding`.
 - `encoding_rs`: Big5 / Big5-HKSCS codecs.
 - `serde`, `sha2`: serialization and content hashing.
-- HTTP client: to be added (rustls / reqwest) with certificate pinning.
+- HTTP client: `ureq` + `rustls` (2-way SSL, cert pinning pending) in `http.rs`.
 
 ---
 
@@ -97,7 +100,7 @@ Field layout (start position, length):
 | 17 | txSeq | 401 | 22 | Y | left, space |
 | 18+ | detailList (invoiceDate 8, invoiceNo 20, invoiceAmt 10, invoiceReturn 10, invoiceActualAmt 10, invoiceRemark 40) | 423+ | 98 each | N | — |
 
-The Wellfit engine's `assemble_media_file` currently emits a CSV representation; a V2.8-compliant fixed-width assembler must be added (gap G-MEDIA).
+The Wellfit engine's `media.rs` already implements `assemble_twd_media_file`, which emits the V2.8-compliant 422-char fixed-width BIG-5 media file (base64-encoded into the API `content` field for `formatType=1`). CSV output is not used.
 
 ---
 
