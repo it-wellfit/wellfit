@@ -1,4 +1,4 @@
-name: Wellfit CI/CD Pipeline
+﻿name: Wellfit CI/CD Pipeline
 
 on:
   push:
@@ -43,7 +43,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: |
+          cargo test --workspace
+          cargo test -p wellfit_cli --test integration_tests -- --ignored
 
       - name: Security audit
         run: cargo audit
