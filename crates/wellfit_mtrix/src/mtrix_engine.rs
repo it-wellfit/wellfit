@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Wellfit MTRIX - Specification-Driven Repair and Validation Engine.
 //!
@@ -33,6 +33,7 @@ use wellfit_core::release_gate::ReleaseGate;
 use wellfit_core::scaled::ScaledDecimal;
 
 use crate::config::ValidationConfig;
+use crate::pipeline::{default_pipeline, PipelineContext};
 use crate::repairs;
 use crate::spec::{self, FieldKind, FileRole, FileSpec, KeyRole};
 use crate::validators::{
@@ -113,7 +114,7 @@ type RowViolation = (VrRule, String, String);
 type IsolatedRow = (usize, Vec<String>, Vec<RowViolation>);
 
 /// A file after parsing and repair.
-struct ParsedFile {
+pub struct ParsedFile {
     role: FileRole,
     source_name: String,
     rows: Vec<Vec<String>>,
@@ -136,7 +137,7 @@ struct ReferentialFinding<'a> {
 /// The MTRIX engine.
 pub struct MtrixEngine {
     ledger: Arc<IdempotencyLedger>,
-    release_gate: Arc<Mutex<ReleaseGate>>,
+    pub release_gate: Arc<Mutex<ReleaseGate>>,
     /// Repair counters per file.
     pub repaired_counts: RepairedCounts,
     /// Configurable validation parameters.
@@ -298,7 +299,7 @@ impl MtrixEngine {
 
         let mut parsed: Vec<ParsedFile> = Vec::new();
         let mut repaired_outputs: Vec<(PathBuf, String)> = Vec::new();
-        let mut exceptions: Vec<ExceptionNotification> = Vec::new();
+        let exceptions: Vec<ExceptionNotification> = Vec::new();
 
         for item in discovered {
             let file_spec = spec::spec_by_role(item.role);
@@ -562,9 +563,21 @@ impl MtrixEngine {
             });
         }
 
-        self.apply_cross_file_rules(&parsed, &mut report, batch_id, &mut exceptions)?;
-        report.currency_groups = self.currency_groups(&parsed)?;
-        report.recompute_status();
+        // Run post-processing stages through the pipeline.
+        let mut ctx = PipelineContext {
+            engine: self,
+            dir: input_dir,
+            batch_id,
+            output_dir,
+            parsed,
+            repaired_outputs,
+            report,
+            errors: Vec::new(),
+            exceptions,
+        };
+
+        let pipeline = default_pipeline();
+        pipeline.run(&mut ctx)?;
 
         // The claim is retained for both clean and defective drops. A corrected
         // re-send under the same batch identifier is accepted only when its
@@ -572,30 +585,12 @@ impl MtrixEngine {
         // fingerprint is a true duplicate and is refused. Releasing the claim on
         // isolation would let the same defective drop be ingested twice.
 
-        let error_count = report.error_count();
-        let mut gate = self.release_gate.lock().unwrap();
-        gate.verify_payload(
-            error_count == 0,
-            &format!("{error_count} validation error(s) recorded"),
-        );
-        drop(gate);
-
-        for (out_path, content) in repaired_outputs {
-            let dir = out_path
-                .parent()
-                .ok_or_else(|| format!("output path has no parent: {}", out_path.display()))?;
-            fs::create_dir_all(dir)
-                .map_err(|e| format!("cannot create output folder {}: {e}", dir.display()))?;
-            fs::write(&out_path, content)
-                .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
-        }
-
         // Direction B: export exception notifications for cross-file findings
         // so the business side can synchronize master data.
-        if !exceptions.is_empty() {
-            report.exceptions = exceptions.clone();
+        if !ctx.exceptions.is_empty() {
+            ctx.report.exceptions = ctx.exceptions.clone();
             let exception_path = input_dir.join(format!("{}_exceptions.json", batch_id));
-            let exception_json = serde_json::to_string_pretty(&report.exceptions)
+            let exception_json = serde_json::to_string_pretty(&ctx.report.exceptions)
                 .map_err(|e| format!("cannot serialise exception notifications: {e}"))?;
             fs::write(&exception_path, exception_json).map_err(|e| {
                 format!(
@@ -605,7 +600,7 @@ impl MtrixEngine {
             })?;
         }
 
-        Ok(report)
+        Ok(ctx.report)
     }
 
     /// Validate a single row. Returns every violated rule with the offending key
@@ -911,7 +906,7 @@ impl MtrixEngine {
     }
 
     /// VR-08 .. VR-11: cross-file referential integrity.
-    fn apply_cross_file_rules(
+    pub fn apply_cross_file_rules(
         &self,
         parsed: &[ParsedFile],
         report: &mut ValidationReport,
@@ -1442,7 +1437,7 @@ impl MtrixEngine {
 
     /// VR-12 preparation: amounts grouped by country. Currencies are never
     /// converted (MTRIX-023), the country is the reporting unit.
-    fn currency_groups(&self, parsed: &[ParsedFile]) -> Result<Vec<CurrencyGroup>, String> {
+    pub fn currency_groups(&self, parsed: &[ParsedFile]) -> Result<Vec<CurrencyGroup>, String> {
         let mut groups: HashMap<String, CurrencyGroup> = HashMap::new();
         if let Some(sales) = parsed
             .iter()
@@ -1570,14 +1565,13 @@ fn negative_measure(file_spec: &FileSpec, raw_line: &str) -> bool {
 /// zero-padded, so lexicographic comparison is order-equivalent to a numeric
 /// comparison; this must not be relied upon for shorter or unpadded stamps.
 fn file_stamp(file_name: &str, prefix: &str) -> String {
-    let trimmed = file_name.trim_start_matches(|c: char| c.is_ascii_alphabetic());
     let after_prefix = file_name
+        .trim_start_matches(|c: char| c.is_ascii_alphabetic())
         .get(prefix.len()..)
         .unwrap_or_default()
         .chars()
         .take_while(|c| c.is_ascii_digit())
         .collect::<String>();
-    let _ = trimmed;
     after_prefix
 }
 

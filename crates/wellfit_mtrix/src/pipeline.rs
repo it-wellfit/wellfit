@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Validation pipeline for the MTRIX engine.
 //!
@@ -6,9 +6,8 @@
 //! [`PipelineContext`]. Stages can be reordered, added, or removed without
 //! changing the engine's orchestration logic.
 
-use crate::mtrix_engine::MtrixEngine;
-use crate::spec::FileRole;
-use crate::validators::ValidationReport;
+use crate::mtrix_engine::{MtrixEngine, ParsedFile};
+use crate::validators::{ValidationReport, ExceptionNotification};
 use std::path::PathBuf;
 
 /// Shared context passed through all pipeline stages.
@@ -29,16 +28,8 @@ pub struct PipelineContext<'a> {
     pub report: ValidationReport,
     /// Error accumulator (non-fatal errors).
     pub errors: Vec<String>,
-}
-
-/// A parsed file in the drop.
-#[derive(Debug, Clone)]
-pub struct ParsedFile {
-    pub role: FileRole,
-    pub source_name: String,
-    pub rows: Vec<Vec<String>>,
-    pub row_lines: Vec<usize>,
-    pub rejected: bool,
+    /// Exception notifications for cross-file findings.
+    pub exceptions: Vec<ExceptionNotification>,
 }
 
 /// A pipeline stage that can be executed.
@@ -95,6 +86,8 @@ impl PipelineStage for ParseStage {
     }
 
     fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+        // Parsing is done in the per-file loop within process_drop.
+        // This stage is a marker for future extraction.
         Ok(())
     }
 }
@@ -108,6 +101,8 @@ impl PipelineStage for RepairStage {
     }
 
     fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+        // Repairs are applied during parsing in the per-file loop.
+        // This stage is a marker for future extraction.
         Ok(())
     }
 }
@@ -121,6 +116,8 @@ impl PipelineStage for ValidateStage {
     }
 
     fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+        // Validation is done during parsing in the per-file loop.
+        // This stage is a marker for future extraction.
         Ok(())
     }
 }
@@ -134,6 +131,8 @@ impl PipelineStage for AggregateStage {
     }
 
     fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+        // Aggregation is done during parsing in the per-file loop.
+        // This stage is a marker for future extraction.
         Ok(())
     }
 }
@@ -146,7 +145,8 @@ impl PipelineStage for CrossFileStage {
         "CrossFile"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+    fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
+        ctx.engine.apply_cross_file_rules(&ctx.parsed, &mut ctx.report, ctx.batch_id, &mut ctx.exceptions)?;
         Ok(())
     }
 }
@@ -159,7 +159,16 @@ impl PipelineStage for ReportStage {
         "Report"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+    fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
+        ctx.report.currency_groups = ctx.engine.currency_groups(&ctx.parsed)?;
+        ctx.report.recompute_status();
+        let error_count = ctx.report.error_count();
+        let mut gate = ctx.engine.release_gate.lock().unwrap();
+        gate.verify_payload(
+            error_count == 0,
+            &format!("{error_count} validation error(s) recorded"),
+        );
+        drop(gate);
         Ok(())
     }
 }
@@ -172,7 +181,17 @@ impl PipelineStage for OutputStage {
         "Output"
     }
 
-    fn execute(&self, _ctx: &mut PipelineContext) -> Result<(), String> {
+    fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
+        // Write repaired output files.
+        for (out_path, content) in &ctx.repaired_outputs {
+            let dir = out_path
+                .parent()
+                .ok_or_else(|| format!("output path has no parent: {}", out_path.display()))?;
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("cannot create output folder {}: {e}", dir.display()))?;
+            std::fs::write(out_path, content)
+                .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
+        }
         Ok(())
     }
 }
