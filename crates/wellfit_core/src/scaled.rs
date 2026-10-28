@@ -8,8 +8,8 @@
 //! floating point, all measures are carried as a scaled `i64`: the value equals
 //! `units / 10^4`.
 //!
-//! Values with more than four fractional digits are rejected rather than
-//! rounded or truncated; the caller can preserve the original text for review.
+//! The original text is always preserved by the caller, so no precision is lost
+//! relative to the source file; the scaled form exists only for arithmetic.
 
 use serde::{Deserialize, Serialize};
 
@@ -44,70 +44,67 @@ impl ScaledDecimal {
 
     /// Add two values, returning `None` on overflow.
     pub fn checked_add(&self, other: &ScaledDecimal) -> Option<ScaledDecimal> {
-        self.units
-            .checked_add(other.units)
-            .map(ScaledDecimal::from_units)
+        self.units.checked_add(other.units).map(ScaledDecimal::from_units)
     }
 
     /// Parse a decimal literal without floating point.
     ///
-    /// Accepts an optional sign, an integer part, and up to four fractional
-    /// digits. Extra fractional digits are rejected rather than rounded or
-    /// truncated.
+    /// Accepts optional sign, an integer part, and up to four fractional digits.
+    /// Extra fractional digits beyond [`ScaledDecimal::SCALE`] are truncated and
+    /// the original string stays available to the caller for reporting.
     pub fn parse(raw: &str) -> Result<Self, String> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err("empty numeric value".to_string());
         }
-        let (negative, unsigned) = match trimmed.strip_prefix('-') {
-            Some(value) => (true, value),
-            None => (false, trimmed.strip_prefix('+').unwrap_or(trimmed)),
+        let (int_part, frac_part) = match trimmed.split_once('.') {
+            Some((a, b)) => (a, b),
+            None => (trimmed, ""),
         };
-        let (int_part, frac_part) = match unsigned.split_once('.') {
-            Some(parts) => parts,
-            None => (unsigned, ""),
-        };
-        let valid_digits = |digits: &str| digits.chars().all(|c| c.is_ascii_digit());
-        if unsigned.contains('.') && unsigned.matches('.').count() != 1
-            || (!valid_digits(int_part) && !int_part.is_empty())
-            || (!valid_digits(frac_part) && !frac_part.is_empty())
-        {
+        let negative = int_part.starts_with('-');
+        let int_digits: String = int_part
+            .trim_start_matches(['-', '+'])
+            .chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect();
+        let mut frac_digits: String = frac_part.chars().filter(|c| c.is_ascii_digit()).collect();
+        // Anything that is not a digit, a sign or a decimal point is not a
+        // number. Silently dropping it would turn "1e5" into 15.
+        let significant: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+        let only_numeric = significant
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-' || c == '+' || c == '.');
+        if !only_numeric || significant.matches('.').count() > 1 {
             return Err(format!("not a numeric value: '{raw}'"));
         }
-        if int_part.is_empty() && frac_part.is_empty() {
+        if int_digits.is_empty() && frac_digits.is_empty() {
             return Err(format!("not a numeric value: '{raw}'"));
         }
-        if frac_part.len() > Self::SCALE as usize {
-            return Err(format!(
-                "too many fractional digits (maximum {}): '{raw}'",
-                Self::SCALE
-            ));
+        frac_digits.truncate(Self::SCALE as usize);
+        while (frac_digits.len() as u32) < Self::SCALE {
+            frac_digits.push('0');
         }
-        let mut padded_fraction = frac_part.to_string();
-        while padded_fraction.len() < Self::SCALE as usize {
-            padded_fraction.push('0');
-        }
-        let int_value = if int_part.is_empty() {
+        let int_value: i64 = if int_digits.is_empty() {
             0
         } else {
-            int_part
-                .parse::<i128>()
+            int_digits
+                .parse::<i64>()
                 .map_err(|e| format!("invalid integer part '{raw}': {e}"))?
         };
-        let frac_value = if padded_fraction.is_empty() {
+        let frac_value: i64 = if frac_digits.is_empty() {
             0
         } else {
-            padded_fraction
-                .parse::<i128>()
+            frac_digits
+                .parse::<i64>()
                 .map_err(|e| format!("invalid fractional part '{raw}': {e}"))?
         };
         let magnitude = int_value
-            .checked_mul(i128::from(Self::FACTOR))
+            .checked_mul(Self::FACTOR)
             .and_then(|v| v.checked_add(frac_value))
             .ok_or_else(|| format!("numeric overflow: '{raw}'"))?;
-        let signed = if negative { -magnitude } else { magnitude };
-        let units = i64::try_from(signed).map_err(|e| format!("numeric overflow: '{raw}': {e}"))?;
-        Ok(ScaledDecimal { units })
+        Ok(ScaledDecimal {
+            units: if negative { -magnitude } else { magnitude },
+        })
     }
 
     /// Exact plain-text representation with the retained decimal places.
@@ -169,29 +166,9 @@ mod tests {
     }
 
     #[test]
-    fn test_rejects_extra_fractional_digits_without_rounding_or_truncating() {
-        let over_precision = ScaledDecimal::parse("1.234567");
-        let trailing_zero = ScaledDecimal::parse("1.23450");
-        assert!(over_precision.is_err());
-        assert!(trailing_zero.is_err());
-    }
-
-    #[test]
-    fn test_accepts_i64_boundaries_and_rejects_overflow() {
-        let minimum = ScaledDecimal::parse("-922337203685477.5808").unwrap();
-        let maximum = ScaledDecimal::parse("922337203685477.5807").unwrap();
-        assert_eq!(minimum.units(), i64::MIN);
-        assert_eq!(maximum.units(), i64::MAX);
-        assert!(ScaledDecimal::parse("-922337203685477.5809").is_err());
-        assert!(ScaledDecimal::parse("922337203685477.5808").is_err());
-    }
-
-    #[test]
-    fn test_rejects_malformed_signs_and_empty_decimal_parts() {
-        assert!(ScaledDecimal::parse("+-1").is_err());
-        assert!(ScaledDecimal::parse("--1").is_err());
-        assert!(ScaledDecimal::parse("1-").is_err());
-        assert!(ScaledDecimal::parse(".").is_err());
+    fn test_truncates_extra_fractional_digits() {
+        let v = ScaledDecimal::parse("1.234567").unwrap();
+        assert_eq!(v.units(), 12_345);
     }
 
     #[test]

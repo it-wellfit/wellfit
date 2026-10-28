@@ -1,62 +1,10 @@
-﻿# Changelog
+# Changelog
 
 本專案之變更紀錄。格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
 > 對應之知識庫版本：`2026/Knowledge` v1.0（2026-10-20）。
 > **所有數字皆可追溯**，追溯對照見 [`../Knowledge/traceability/claims-vs-evidence.md`](../../Knowledge/traceability/claims-vs-evidence.md)。
-
-### 本機優先基礎（Local-First Foundation）— Phase 0
-
-- 初始化 Git 儲存庫（`main` 分支），首次提交 `aa2fc26`，標籤 `v1.0.2`。
-- 新增 `scripts/check.ps1` 固定檢查入口（fmt + clippy + 單元/整合測試 + SHA-256 fixture 驗證）。
-- 新增 `.env.example`、`.gitattributes`（保留 CR-only 位元組）；`.gitignore` 擴充 `.env.*` 但保留 `.env.example`。
-- 更新 `AGENTS.md`：本機檢查入口、備份指令、CLI 速查、Release Gate 狀態機。
-- 全程式碼以 `cargo fmt --all` 對齊 rustfmt；`scripts/check.ps1` 全綠。
-- 離線備份：`git bundle` 產出並 `git bundle verify` 通過；還原演練（clone + build）成功。
-
-- 新增 `cumulative_balance` 表（`MdmCatalog::new` 初始化）：`customer_id` 主鍵、`balance_cents`、`updated_at`；累加入口 `MdmCatalog::register_cumulative`，唯讀查詢 `MdmHub::get_cumulative_balance`（LOCAL-048）。
-- `IdempotencyLedger::release_file_batch` 在刪除 `file_batches` 前先刪除 `transaction_keys`（LOCAL-049）。
-- `init_db` 在開啟時設定 `PRAGMA foreign_keys = ON`（LOCAL-047 續作）。
-- 新增 `IdempotencyLedger::count_file_batches`，CLI `status` 以此驗證已登記批次數。
-- LOCAL-053 文檔：澄清 `wellfit status` 顯示**帳本生命週期累計**，波次輸出僅為**單次波次** finding 數；`batches_registered` 為已登記批次數。
-
-### 正確性與帳本錯誤處理
-
-- `ScaledDecimal::parse` 拒絕超過四位小數的值，不再靜默截斷；格式、正負號與 `i64` 邊界均有測試。
-- Shopee、報表與 MTRIX 管線的隔離／finding 寫入及失敗批次 claim 釋放若遇資料庫錯誤，會傳回明確錯誤，不再回報看似成功的結果。
-- MTRIX 重複交易數量彙總在格式錯誤或溢位時明確失敗，不以原值代替錯誤加總。
-- MTRIX 國別數量及金額彙總改為 `i128` checked arithmetic；金額維持數量與單價的 `10^8` 精確縮放，不再截位或飽和。
-- MTRIX 修復輸出延至交叉檔與數值計算完成、審計寫入成功後才發布；計算或帳本失敗時不留下修復輸出。
-
-## [1.0.2] — 2026-10-24（配置化驗證）
-
-### 新增
-- `ValidationConfig` 配置模組：CP 格式、Mandatory 欄位、小數位數、嚴格模式可配置
-- `MtrixEngine.config: ValidationConfig` 公開欄位，支援執行時覆蓋
-- `format_warnings` 使用配置驅動的 Mandatory 欄位清單與 CP 格式驗證
-
-### 改善
-- 長期架構演進基礎：為規則外置化（TOML）與 Schema 化（JSON）奠定基礎
-
----
-
-## [1.0.1] — 2026-10-24（稽核後修正）
-
-### 修復（Audit-driven fixes）
-- VR-05 重複交易發現現在帶實體行號（surviving line + duplicate line），row_lines 與合併列同步。
-- 批次 claim 不再於隔離列時被釋放；以內容指紋比對，僅內容變更的重送才釋放舊 claim 並重新登錄，杜絕相同有缺陷批次重複入帳。
-- `format_warnings` 對所有具 allowed-set 的編碼欄位空值統一產出 VR-15 Warning；`COUNTRY`/`COUNTRY_ISO` 空值亦產出 Warning，不再靜默移除金額。
-- `ValidationReport` 新增 `repairs: Vec<AppliedRepair>`，`--report` JSON 現含完整修復明細（檔、行、欄、規則、before、after）。
-- `rules_implemented` 改為 14（VR-12 為目錄條目，未實作），避免自我符合度虛報。
-
-### 文件
-- `mutex.rs` 註解與程式行為對齊（未知擁有者 PID 時視為可打開的過時鎖）。
-
-### 測試
-- 143+ 測試全通過；clippy 零警告。
-
----
 
 ## [1.0.0] — 2026-10-20
 

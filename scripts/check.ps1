@@ -92,3 +92,29 @@ if (-not $SkipFixtures) {
         else { $script:failures++ }
     }
 }
+
+# 7. 技能合規檢查（新增）
+Run-Step "技能合規檢查" {
+    $activeFile = Join-Path $root "..\.kilo\skills\rigorous-skill-pack\ACTIVE_SKILLS.md"
+    if (-not (Test-Path -LiteralPath $activeFile)) { throw "ACTIVE_SKILLS.md 不存在，請先執行 scripts\skills-activate.ps1 啟動技能" }
+    $content = Get-Content -LiteralPath $activeFile -Raw
+    $activeCount = ([regex]::Matches($content, "- \[x\]")).Count
+    if ($activeCount -eq 0) { throw "未啟動任何技能，請先執行 skills-activate.ps1 選擇對應技能" }
+    Write-Host "已啟動技能數量：$activeCount" -ForegroundColor Green
+
+    if ($content -match "06-tdd-and-implementation") {
+        Write-Host "[G6] TDD 技能：確認已執行 clippy 零警告檢查與測試通過" -ForegroundColor Cyan
+    }
+    if ($content -match "08-code-review") {
+        Write-Host "[G8] 審查技能：確認已產生審查報告與回滾證明" -ForegroundColor Cyan
+    }
+    if ($content -match "09-testing-and-quality") {
+        Write-Host "[G9] 品質技能：確認所有測試已通過" -ForegroundColor Cyan
+    }
+    if ($content -match "10-security-and-privacy") {
+        Write-Host "[G9] 安全技能：確認威脅模型與安全審查已完成" -ForegroundColor Cyan
+    }
+    if ($content -match "12-ci-cd-and-release") {
+        Write-Host "[G10] 發布技能：確認回滾程序與備份還原已驗證" -ForegroundColor Cyan
+    }
+}

@@ -399,14 +399,30 @@ impl BankpayEngine {
     }
 
     /// Build a TwdPaymentRequest from a list of vouchers.
+    ///
+    /// Constructs the RqHeader from source_system and customer_id parameters.
     pub fn build_twd_payment_request(
         &self,
         vouchers: &[Voucher],
-        rq_header: api::RqHeader,
+        source_system: &str,
+        customer_id: &str,
         payer_account: &str,
         payer_id: &str,
         format_type: &str,
     ) -> TwdPaymentRequest {
+        let msg_id = format!(
+            "{}{}{:07}",
+            customer_id.chars().take(10).collect::<String>(),
+            chrono::Utc::now().format("%Y%m%d"),
+            1
+        );
+        let rq_header = api::RqHeader {
+            msg_id,
+            request_time: chrono::Utc::now().format("%Y/%m/%d %H:%M:%S").to_string(),
+            customer_ixd: customer_id.to_string(),
+            source_system: source_system.to_string(),
+        };
+
         let tx_list: Vec<TwdPaymentTx> = vouchers
             .iter()
             .map(|v| Self::voucher_to_twd_tx(v, payer_account, payer_id))

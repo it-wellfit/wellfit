@@ -7,7 +7,7 @@
 //! changing the engine's orchestration logic.
 
 use crate::mtrix_engine::{MtrixEngine, ParsedFile};
-use crate::validators::{ExceptionNotification, ValidationReport};
+use crate::validators::ValidationReport;
 use std::path::PathBuf;
 
 /// Shared context passed through all pipeline stages.
@@ -28,8 +28,6 @@ pub struct PipelineContext<'a> {
     pub report: ValidationReport,
     /// Error accumulator (non-fatal errors).
     pub errors: Vec<String>,
-    /// Exception notifications for cross-file findings.
-    pub exceptions: Vec<ExceptionNotification>,
 }
 
 /// A pipeline stage that can be executed.
@@ -150,8 +148,7 @@ impl PipelineStage for CrossFileStage {
             &ctx.parsed,
             &mut ctx.report,
             ctx.batch_id,
-            &mut ctx.exceptions,
-        )?;
+        );
         Ok(())
     }
 }
@@ -165,7 +162,7 @@ impl PipelineStage for ReportStage {
     }
 
     fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
-        ctx.report.currency_groups = ctx.engine.currency_groups(&ctx.parsed)?;
+        let (groups, _errs) = ctx.engine.currency_groups(&ctx.parsed); ctx.report.currency_groups = groups;
         ctx.report.recompute_status();
         let error_count = ctx.report.error_count();
         let mut gate = ctx.engine.release_gate.lock().unwrap();

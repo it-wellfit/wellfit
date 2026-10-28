@@ -1146,10 +1146,13 @@ dependencies = [
  "clap",
  "encoding_rs",
  "rusqlite",
+ "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "sha2",
  "ureq",
+ "webpki-roots 0.26.11",
  "wellfit_core",
 ]
 

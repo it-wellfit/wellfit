@@ -34,4 +34,7 @@ uuid = { version = "1.8", features = ["v4"] }
 encoding_rs = "0.8"
 toml = "0.8"
 ureq = { version = "2.10", features = ["json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1" }
+webpki-roots = "0.26"
 base64 = "0.22"

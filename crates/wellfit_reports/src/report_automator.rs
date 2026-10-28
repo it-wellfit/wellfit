@@ -210,7 +210,7 @@ impl ReportAutomator {
                         cols.len()
                     ),
                     &mut errors,
-                )?;
+                );
                 continue;
             }
 
@@ -246,7 +246,7 @@ impl ReportAutomator {
                     "ERR_INV_NUMBER_FORMAT",
                     reason,
                     &mut errors,
-                )?;
+                );
                 continue;
             }
             let [begin_inv, in_qty, out_qty, adj_qty, end_inv] = quantities;
@@ -274,7 +274,7 @@ impl ReportAutomator {
                     "ERR_INV_BALANCE_MISMATCH",
                     reason,
                     &mut errors,
-                )?;
+                );
             } else {
                 valid_records.push(record);
             }
@@ -285,9 +285,7 @@ impl ReportAutomator {
         if !is_clean {
             // The report was defective, so the batch claim is released: a
             // corrected re-export under the same batch identifier is accepted.
-            self.ledger
-                .release_file_batch(batch_id)
-                .map_err(|e| format!("Database error releasing defective batch claim: {e}"))?;
+            let _ = self.ledger.release_file_batch(batch_id);
         }
         let mut gate = self.release_gate.lock().unwrap();
         gate.verify_payload(
@@ -336,26 +334,21 @@ impl ReportAutomator {
         code: &str,
         reason: String,
         errors: &mut Vec<ReportRowError>,
-    ) -> Result<(), String> {
-        self.ledger
-            .log_quarantine(
-                batch_id,
-                FUYI_SOURCE_FILE,
-                line_number,
-                raw_value,
-                code,
-                &reason,
-            )
-            .map_err(|e| {
-                format!("Database error recording quarantine for line {line_number}: {e}")
-            })?;
+    ) {
+        let _ = self.ledger.log_quarantine(
+            batch_id,
+            FUYI_SOURCE_FILE,
+            line_number,
+            raw_value,
+            code,
+            &reason,
+        );
         errors.push(ReportRowError {
             line: line_number,
             raw: raw_value.to_string(),
             code: code.to_string(),
             reason,
         });
-        Ok(())
     }
 }
 

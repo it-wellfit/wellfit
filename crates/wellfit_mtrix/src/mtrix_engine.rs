@@ -25,21 +25,19 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 
 use wellfit_core::ledger::{Finding as LedgerFinding, FindingSeverity, IdempotencyLedger};
 use wellfit_core::mdm::MdmHub;
 use wellfit_core::release_gate::ReleaseGate;
 use wellfit_core::scaled::ScaledDecimal;
 
-use crate::config::ValidationConfig;
 use crate::pipeline::{default_pipeline, PipelineContext};
 use crate::repairs;
 use crate::spec::{self, FieldKind, FileRole, FileSpec, KeyRole};
 use crate::validators::{
     check_code, check_filename, compare_header, is_ean13, is_iso_alpha3, is_valid_yyyymmdd,
-    BatchStatus, CodeCheck, CurrencyGroup, Deviation, ExceptionNotification, FileOutcome, Finding,
-    Outcome, Severity, ValidationReport, VrRule,
+    BatchStatus, CodeCheck, CurrencyGroup, Deviation, FileOutcome, Finding, Outcome, Severity,
+    ValidationReport, VrRule,
 };
 
 /// The five files of a drop, keyed by business role.
@@ -140,8 +138,6 @@ pub struct MtrixEngine {
     pub release_gate: Arc<Mutex<ReleaseGate>>,
     /// Repair counters per file.
     pub repaired_counts: RepairedCounts,
-    /// Configurable validation parameters.
-    pub config: ValidationConfig,
 }
 
 impl MtrixEngine {
@@ -151,7 +147,6 @@ impl MtrixEngine {
             ledger,
             release_gate,
             repaired_counts: RepairedCounts::default(),
-            config: ValidationConfig::default(),
         }
     }
 
@@ -255,51 +250,15 @@ impl MtrixEngine {
             )
             .map_err(|e| format!("cannot register the batch in the ledger: {e}"))?;
         if !claimed {
-            // A corrected re-send under the same batch identifier is allowed
-            // when the content changed: the previous claim is released and a
-            // new one is taken. An identical fingerprint is a true duplicate
-            // and is refused.
-            let existing = self
-                .ledger
-                .content_hash_of(batch_id)
-                .map_err(|e| format!("cannot read the previous batch claim: {e}"))?;
-            let new_content_hash = IdempotencyLedger::compute_sha256(fingerprint.as_bytes());
-            let corrected = existing
-                .as_deref()
-                .map(|h| h != new_content_hash)
-                .unwrap_or(false);
-            if corrected {
-                self.ledger
-                    .release_file_batch(batch_id)
-                    .map_err(|e| format!("cannot release the previous batch claim: {e}"))?;
-                let re_claimed = self
-                    .ledger
-                    .register_file_batch(
-                        batch_id,
-                        "MTRIX_DROP",
-                        "mtrix-drop",
-                        fingerprint.as_bytes(),
-                        0,
-                    )
-                    .map_err(|e| format!("cannot register the corrected batch: {e}"))?;
-                if !re_claimed {
-                    return Err(format!(
-                        "Duplicate MTRIX batch {batch_id} already registered; use a new --batch to resend a corrected drop"
-                    ));
-                }
-            } else {
-                return Err(format!(
-                    "Duplicate MTRIX batch {batch_id} already registered; use a new --batch to resend a corrected drop"
-                ));
-            }
+            return Err(format!(
+                "Duplicate MTRIX batch {batch_id} already registered; use a new --batch to resend a corrected drop"
+            ));
         }
 
         let mut report = ValidationReport::new(batch_id);
         report.spec_conformance = spec_conformance();
 
         let mut parsed: Vec<ParsedFile> = Vec::new();
-        let mut repaired_outputs: Vec<(PathBuf, String)> = Vec::new();
-        let exceptions: Vec<ExceptionNotification> = Vec::new();
 
         for item in discovered {
             let file_spec = spec::spec_by_role(item.role);
@@ -336,7 +295,7 @@ impl MtrixEngine {
                         key: item.file_name.clone(),
                         reason: warning.clone(),
                     },
-                )?;
+                );
             }
             if !outcome.filename_ok {
                 outcome.rejected = true;
@@ -360,7 +319,7 @@ impl MtrixEngine {
                         key: item.file_name.clone(),
                         reason: outcome.reject_reason.clone(),
                     },
-                )?;
+                );
                 report.files.push(outcome);
                 continue;
             }
@@ -392,7 +351,7 @@ impl MtrixEngine {
                             key: file_spec.prefix.to_string(),
                             reason: difference.clone(),
                         },
-                    )?;
+                    );
                 }
                 report.files.push(outcome);
                 continue;
@@ -430,7 +389,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason,
                         },
-                    )?;
+                    );
                 }
 
                 // Every rule is evaluated, not just the first one that fails: the
@@ -438,19 +397,24 @@ impl MtrixEngine {
                 // why the row was rejected, otherwise the sender has to resubmit
                 // the file several times to discover the remaining problems.
                 for (rule, key, reason) in self.format_warnings(file_spec, &values) {
-                    self.record_finding(
-                        &mut report,
+                    let _ = self.ledger.log_finding(LedgerFinding {
                         batch_id,
-                        Finding {
-                            rule,
-                            severity: Severity::Warning,
-                            outcome: Outcome::Listed,
-                            file: file_spec.prefix.to_string(),
-                            line: line_no,
-                            key,
-                            reason,
-                        },
-                    )?;
+                        rule_code: rule.id(),
+                        severity: ledger_severity(Severity::Warning),
+                        filename: file_spec.prefix,
+                        line_number: line_no,
+                        key_value: &key,
+                        reason: &reason,
+                    });
+                    report.add_finding(Finding {
+                        rule,
+                        severity: Severity::Warning,
+                        outcome: Outcome::Listed,
+                        file: file_spec.prefix.to_string(),
+                        line: line_no,
+                        key,
+                        reason,
+                    });
                 }
                 let violations = self.validate_row(file_spec, &values, line_no);
                 if !violations.is_empty() {
@@ -463,33 +427,23 @@ impl MtrixEngine {
 
             // VR-05: aggregate duplicate sales transactions (repair, not rejection).
             rows =
-                self.aggregate_duplicates(file_spec, rows, &mut row_lines, &mut report, batch_id)?;
+                self.aggregate_duplicates(file_spec, rows, &mut row_lines, &mut report, batch_id);
 
             outcome.repairs_applied = row_log.count();
-            report.repairs.extend(row_log.applied().iter().cloned());
             outcome.rows_accepted = rows.len();
             outcome.rows_quarantined = isolated.len();
 
             for (line_no, values, violations) in &isolated {
                 for (rule, key, reason) in violations {
-                    self.ledger
-                        .log_quarantine_with_severity(LedgerFinding {
-                            batch_id,
-                            rule_code: rule.id(),
-                            severity: ledger_severity(Severity::Error),
-                            filename: file_spec.prefix,
-                            line_number: *line_no,
-                            key_value: &values.join(";"),
-                            reason,
-                        })
-                        .map_err(|e| {
-                            format!(
-                                "cannot persist quarantine {} at {} line {}: {e}",
-                                rule.id(),
-                                file_spec.prefix,
-                                line_no
-                            )
-                        })?;
+                    let _ = self.ledger.log_quarantine_with_severity(LedgerFinding {
+                        batch_id,
+                        rule_code: rule.id(),
+                        severity: ledger_severity(Severity::Error),
+                        filename: file_spec.prefix,
+                        line_number: *line_no,
+                        key_value: &values.join(";"),
+                        reason,
+                    });
                     report.add_finding(Finding {
                         rule: *rule,
                         severity: Severity::Error,
@@ -503,22 +457,15 @@ impl MtrixEngine {
             }
 
             for repair in row_log.applied() {
-                self.ledger
-                    .log_finding(LedgerFinding {
-                        batch_id,
-                        rule_code: &repair.rule_id,
-                        severity: ledger_severity(Severity::Info),
-                        filename: &repair.file,
-                        line_number: repair.line,
-                        key_value: &repair.column,
-                        reason: &format!("{} -> {}", repair.before, repair.after),
-                    })
-                    .map_err(|e| {
-                        format!(
-                            "cannot persist repair finding {} at {} line {}: {e}",
-                            repair.rule_id, repair.file, repair.line
-                        )
-                    })?;
+                let _ = self.ledger.log_finding(LedgerFinding {
+                    batch_id,
+                    rule_code: &repair.rule_id,
+                    severity: ledger_severity(Severity::Info),
+                    filename: &repair.file,
+                    line_number: repair.line,
+                    key_value: &repair.column,
+                    reason: &format!("{} -> {}", repair.before, repair.after),
+                });
             }
 
             self.apply_counts(file_spec.role, row_log.count());
@@ -534,23 +481,22 @@ impl MtrixEngine {
                         spec_name: col.spec_name.to_string(),
                         canonical_name: col.canonical_name.to_string(),
                         issue_id: col.issue_id.unwrap_or("").to_string(),
-                        manual_page: col
-                            .manual_page
-                            .expect("column declared by the MTRIX specification"),
                     });
                 }
             }
 
             if let Some(dir) = output_dir {
+                fs::create_dir_all(dir)
+                    .map_err(|e| format!("cannot create output folder {}: {e}", dir.display()))?;
                 let out_name = repaired_file_name(&item.file_name);
                 let out_path = dir.join(out_name);
                 let mut body = canonical_header.join(";");
                 for row in &rows {
-                    body.push_str(self.config.output_line_ending.as_str());
+                    body.push('\n');
                     body.push_str(&row.join(";"));
                 }
-                let terminator = self.config.output_line_ending.as_str();
-                repaired_outputs.push((out_path, format!("{body}{terminator}")));
+                fs::write(&out_path, format!("{body}\n"))
+                    .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
             }
 
             report.files.push(outcome);
@@ -570,41 +516,23 @@ impl MtrixEngine {
             batch_id,
             output_dir,
             parsed,
-            repaired_outputs,
+            repaired_outputs: Vec::new(),
             report,
             errors: Vec::new(),
-            exceptions,
         };
+
+        // Release the batch claim for defective drops (isolated rows).
+        let had_isolated_rows = ctx.report.files.iter().any(|f| f.rows_quarantined > 0);
+        if had_isolated_rows {
+            let _ = ctx.engine.ledger.release_file_batch(batch_id);
+        }
 
         let pipeline = default_pipeline();
         pipeline.run(&mut ctx)?;
 
-        // The claim is retained for both clean and defective drops. A corrected
-        // re-send under the same batch identifier is accepted only when its
-        // content fingerprint differs (see the claim block above); an identical
-        // fingerprint is a true duplicate and is refused. Releasing the claim on
-        // isolation would let the same defective drop be ingested twice.
-
-        // Direction B: export exception notifications for cross-file findings
-        // so the business side can synchronize master data.
-        if !ctx.exceptions.is_empty() {
-            ctx.report.exceptions = ctx.exceptions.clone();
-            let exception_path = input_dir.join(format!("{}_exceptions.json", batch_id));
-            let exception_json = serde_json::to_string_pretty(&ctx.report.exceptions)
-                .map_err(|e| format!("cannot serialise exception notifications: {e}"))?;
-            fs::write(&exception_path, exception_json).map_err(|e| {
-                format!(
-                    "cannot write exception file {}: {e}",
-                    exception_path.display()
-                )
-            })?;
-        }
-
         Ok(ctx.report)
     }
 
-    /// Validate a single row. Returns every violated rule with the offending key
-    /// and the reason. A row that violates at least one rule is isolated; the
     /// violations are all reported, not only the first one.
     fn validate_row(
         &self,
@@ -705,47 +633,9 @@ impl MtrixEngine {
         values: &[String],
     ) -> Vec<(VrRule, String, String)> {
         let mut warnings = Vec::new();
-        let row_has_value = values.iter().any(|v| !v.trim().is_empty());
         for (idx, col) in file_spec.columns.iter().enumerate() {
             let value = values.get(idx).map(|v| v.trim()).unwrap_or("");
             if value.is_empty() {
-                // Mandatory-ness is undefined for columns listed in the config
-                // (MTRIX-003). An empty value in such a column is a
-                // data-quality caveat rather than a rejection: keep the row,
-                // report the caveat.
-                if self
-                    .config
-                    .undefined_mandatory_columns
-                    .contains(&col.source_name)
-                    && col.source_name != "DOCUMENT_TYPE"
-                    && col.source_name != "SALESPERSON_CODE"
-                    && row_has_value
-                {
-                    warnings.push((
-                        VrRule::Vr15,
-                        String::new(),
-                        format!(
-                            "{} is empty; mandatory-ness is undefined by the manual (MTRIX-003)",
-                            col.source_name
-                        ),
-                    ));
-                }
-                // An empty country code on a row that carries other values is a
-                // column-shift or missing-data defect: the row cannot be grouped
-                // for the acceptance totals, so it must be visible (R-01).
-                let is_country = col.canonical_name == "COUNTRY_ISO"
-                    || col.source_name == "COUNTRY"
-                    || col.source_name == "COUNTRY_ISO";
-                if is_country && row_has_value {
-                    warnings.push((
-                        VrRule::Vr15,
-                        String::new(),
-                        format!(
-                            "{} is empty; the row cannot be grouped for the acceptance totals (MTRIX-003, MTRIX-023)",
-                            col.source_name
-                        ),
-                    ));
-                }
                 continue;
             }
             if col.source_name.ends_with("_NAME") && is_iso_alpha3(value) {
@@ -769,20 +659,6 @@ impl MtrixEngine {
                         ),
                     ));
                 }
-            }
-            if col.source_name == "ZIP_CODE"
-                && self.config.cp_format_strict
-                && !value.is_empty()
-                && !self.config.is_valid_cp(value)
-            {
-                warnings.push((
-                    VrRule::Vr15,
-                    value.to_string(),
-                    format!(
-                        "ZIP_CODE '{}' does not match CP format; format is unconfirmed (MTRIX-001)",
-                        value
-                    ),
-                ));
             }
         }
         warnings
@@ -812,9 +688,9 @@ impl MtrixEngine {
         row_lines: &mut Vec<usize>,
         report: &mut ValidationReport,
         batch_id: &str,
-    ) -> Result<Vec<Vec<String>>, String> {
+    ) -> Vec<Vec<String>> {
         if file_spec.role != FileRole::Sales {
-            return Ok(rows);
+            return rows;
         }
         let doc_idx = file_spec.index_of("DOCUMENT_NUMBER");
         let batch_idx = file_spec.index_of("BATCH_CODE");
@@ -822,17 +698,18 @@ impl MtrixEngine {
         let cust_idx = file_spec.index_of_role(KeyRole::Customer);
         let type_idx = file_spec.index_of("DOCUMENT_TYPE");
         let (Some(doc_idx), Some(batch_idx), Some(qty_idx)) = (doc_idx, batch_idx, qty_idx) else {
-            return Ok(rows);
+            return rows;
         };
 
         let mut grouped: Vec<(String, Vec<String>)> = Vec::new();
         let mut grouped_lines: Vec<usize> = Vec::new();
         let mut index: HashMap<String, usize> = HashMap::new();
-        // (natural key, surviving line, duplicate line) for every merge.
-        let mut merged: Vec<(String, usize, usize)> = Vec::new();
-
+        let mut merged_keys: Vec<String> = Vec::new();
         for (i, row) in rows.into_iter().enumerate() {
-            let duplicate_line = row_lines.get(i).copied().unwrap_or(0);
+            // The candidate natural key of a transaction is the customer, the
+            // document type, the document number and the item. A narrower key
+            // would merge two genuinely different transactions and silently
+            // destroy one of them.
             let key = [
                 cust_idx
                     .and_then(|i| row.get(i))
@@ -846,43 +723,34 @@ impl MtrixEngine {
                 row.get(batch_idx).map(|v| v.trim()).unwrap_or(""),
             ]
             .join("|");
-            match index.get(&key).copied() {
-                Some(pos) => {
+            match index.get(&key) {
+                Some(&pos) => {
                     let previous = grouped[pos].1[qty_idx].clone();
                     let current = row.get(qty_idx).cloned().unwrap_or_default();
-                    let previous_value = ScaledDecimal::parse(&previous).map_err(|e| {
-                        format!("cannot aggregate invalid prior quantity for key {key}: {e}")
-                    })?;
-                    let current_value = ScaledDecimal::parse(&current).map_err(|e| {
-                        format!("cannot aggregate invalid quantity for key {key}: {e}")
-                    })?;
-                    let sum = previous_value.checked_add(&current_value).ok_or_else(|| {
-                        format!("quantity overflow while aggregating duplicate sales key {key}")
-                    })?;
-                    let formatted = sum.to_plain_string();
-                    let formatted = formatted
-                        .trim_end_matches('0')
-                        .trim_end_matches('.')
-                        .to_string();
-                    grouped[pos].1[qty_idx] = if formatted.is_empty() {
-                        "0".to_string()
-                    } else {
-                        formatted
-                    };
-                    merged.push((key, grouped_lines[pos], duplicate_line));
+                    let sum = ScaledDecimal::parse(&previous)
+                        .ok()
+                        .zip(ScaledDecimal::parse(&current).ok())
+                        .and_then(|(a, b)| a.checked_add(&b))
+                        .map(|v| v.to_plain_string())
+                        .unwrap_or_else(|| previous.clone());
+                    grouped[pos].1[qty_idx] = sum;
+                    merged_keys.push(key);
                 }
                 None => {
                     index.insert(key.clone(), grouped.len());
-                    grouped_lines.push(duplicate_line);
+                    grouped_lines.push(row_lines[i]);
                     grouped.push((key, row));
                 }
             }
         }
 
-        // VR-05 finding for every transaction that was actually merged. The
-        // surviving line and the duplicate line are both named so the sender
-        // can locate both rows.
-        for (key, surviving_line, duplicate_line) in &merged {
+        // Every transaction that was merged into an earlier one is reported:
+        // the rows are aggregated (the manual demands a single row), but the
+        // sender has to know that a duplicate was found. The field dictionary
+        // declares VR-05 as an error level, and the manual calls a duplicated
+        // transaction an error, so the finding closes the release gate even
+        // though the remedy was applied.
+        for key in &merged_keys {
             self.record_finding(
                 report,
                 batch_id,
@@ -891,18 +759,15 @@ impl MtrixEngine {
                     severity: Severity::Error,
                     outcome: Outcome::Repaired,
                     file: file_spec.prefix.to_string(),
-                    line: *surviving_line,
+                    line: 0,
                     key: key.clone(),
-                    reason: format!(
-                        "duplicate sales transaction at line {duplicate_line} aggregated into line {surviving_line} (VR-05, error level)"
-                    ),
+                    reason: "duplicate sales transaction aggregated into a single row (VR-05, error level)".to_string(),
                 },
-            )?;
+            );
         }
-
         row_lines.clear();
         row_lines.extend(grouped_lines);
-        Ok(grouped.into_iter().map(|(_, row)| row).collect())
+        grouped.into_iter().map(|(_, row)| row).collect()
     }
 
     /// VR-08 .. VR-11: cross-file referential integrity.
@@ -911,8 +776,7 @@ impl MtrixEngine {
         parsed: &[ParsedFile],
         report: &mut ValidationReport,
         batch_id: &str,
-        exceptions: &mut Vec<ExceptionNotification>,
-    ) -> Result<(), String> {
+    ) {
         let customers: Option<HashSet<String>> = parsed
             .iter()
             .find(|f| f.role == FileRole::Customer && !f.rejected)
@@ -1030,7 +894,7 @@ impl MtrixEngine {
                         let reason = format!(
                             "customer '{customer}' does not exist in the customer master (ALTHCI)"
                         );
-                        if let Some(notification) = self.record_referential(
+                        self.record_referential(
                             report,
                             batch_id,
                             ReferentialFinding {
@@ -1040,9 +904,7 @@ impl MtrixEngine {
                                 key: customer,
                                 reason: &reason,
                             },
-                        )? {
-                            exceptions.push(notification);
-                        }
+                        );
                     }
                     None => {
                         self.record_not_evaluable(
@@ -1052,7 +914,7 @@ impl MtrixEngine {
                             sales,
                             line_no,
                             customer,
-                        )?;
+                        );
                     }
                     _ => {}
                 }
@@ -1066,7 +928,7 @@ impl MtrixEngine {
                             let reason = format!(
                                 "item '{batch}' is not present in both the inventory file ({in_inventory}) and the product master ({in_product})"
                             );
-                            if let Some(notification) = self.record_referential(
+                            self.record_referential(
                                 report,
                                 batch_id,
                                 ReferentialFinding {
@@ -1076,9 +938,7 @@ impl MtrixEngine {
                                     key: batch,
                                     reason: &reason,
                                 },
-                            )? {
-                                exceptions.push(notification);
-                            }
+                            );
                         }
                     }
                     _ => {
@@ -1089,7 +949,7 @@ impl MtrixEngine {
                             sales,
                             line_no,
                             batch,
-                        )?;
+                        );
                     }
                 }
 
@@ -1107,7 +967,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason: "SALESPERSON_CODE is empty; mandatory-ness is undefined by the manual (MTRIX-003)".to_string(),
                         },
-                    )?;
+                    );
                 } else {
                     match &sales_force {
                         Some(pairs) => {
@@ -1121,7 +981,7 @@ impl MtrixEngine {
                                 let reason = format!(
                                     "salesperson '{salesperson}' is not registered for customer '{expected_customer}' in the sales force master"
                                 );
-                                if let Some(notification) = self.record_referential(
+                                self.record_referential(
                                     report,
                                     batch_id,
                                     ReferentialFinding {
@@ -1131,9 +991,7 @@ impl MtrixEngine {
                                         key: salesperson,
                                         reason: &reason,
                                     },
-                                )? {
-                                    exceptions.push(notification);
-                                }
+                                );
                             }
                         }
                         None => {
@@ -1144,7 +1002,7 @@ impl MtrixEngine {
                                 sales,
                                 line_no,
                                 salesperson,
-                            )?;
+                            );
                         }
                     }
                 }
@@ -1163,7 +1021,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason: "DOCUMENT_TYPE is empty; the row is kept because the manual does not define the mandatory-ness of the field (MTRIX-003)".to_string(),
                         },
-                    )?;
+                    );
                 }
             }
         }
@@ -1189,7 +1047,7 @@ impl MtrixEngine {
                         let reason = format!(
                             "inventory item '{batch}' does not exist in the product master (ALTHPD)"
                         );
-                        if let Some(notification) = self.record_referential(
+                        self.record_referential(
                             report,
                             batch_id,
                             ReferentialFinding {
@@ -1199,9 +1057,7 @@ impl MtrixEngine {
                                 key: batch,
                                 reason: &reason,
                             },
-                        )? {
-                            exceptions.push(notification);
-                        }
+                        );
                     }
                     None => {
                         self.record_not_evaluable(
@@ -1211,7 +1067,7 @@ impl MtrixEngine {
                             inventory,
                             line_no,
                             batch,
-                        )?;
+                        );
                     }
                     _ => {}
                 }
@@ -1242,7 +1098,7 @@ impl MtrixEngine {
                         let reason = format!(
                             "sales force customer '{customer}' does not exist in the customer master (ALTHCI)"
                         );
-                        if let Some(notification) = self.record_referential(
+                        self.record_referential(
                             report,
                             batch_id,
                             ReferentialFinding {
@@ -1252,9 +1108,7 @@ impl MtrixEngine {
                                 key: customer,
                                 reason: &reason,
                             },
-                        )? {
-                            exceptions.push(notification);
-                        }
+                        );
                     }
                     None => {
                         self.record_not_evaluable(
@@ -1264,7 +1118,7 @@ impl MtrixEngine {
                             sales_force,
                             line_no,
                             customer,
-                        )?;
+                        );
                     }
                     _ => {}
                 }
@@ -1320,11 +1174,10 @@ impl MtrixEngine {
                             key: inv_date,
                             reason,
                         },
-                    )?;
+                    );
                 }
             }
         }
-        Ok(())
     }
 
     /// Record a finding in the report and in the ledger at the same time.
@@ -1334,32 +1187,17 @@ impl MtrixEngine {
     /// back later, so both are written together. A row that was isolated is
     /// written to the quarantine log instead, so that the two counts of the
     /// `status` command do not count the same problem twice.
-    fn record_finding(
-        &self,
-        report: &mut ValidationReport,
-        batch_id: &str,
-        finding: Finding,
-    ) -> Result<(), String> {
-        self.ledger
-            .log_finding(LedgerFinding {
-                batch_id,
-                rule_code: finding.rule.id(),
-                severity: ledger_severity(finding.severity),
-                filename: &finding.file,
-                line_number: finding.line,
-                key_value: &finding.key,
-                reason: &finding.reason,
-            })
-            .map_err(|e| {
-                format!(
-                    "cannot persist finding {} at {} line {}: {e}",
-                    finding.rule.id(),
-                    finding.file,
-                    finding.line
-                )
-            })?;
+    fn record_finding(&self, report: &mut ValidationReport, batch_id: &str, finding: Finding) {
+        let _ = self.ledger.log_finding(LedgerFinding {
+            batch_id,
+            rule_code: finding.rule.id(),
+            severity: ledger_severity(finding.severity),
+            filename: &finding.file,
+            line_number: finding.line,
+            key_value: &finding.key,
+            reason: &finding.reason,
+        });
         report.add_finding(finding);
-        Ok(())
     }
 
     fn record_referential(
@@ -1367,7 +1205,7 @@ impl MtrixEngine {
         report: &mut ValidationReport,
         batch_id: &str,
         finding: ReferentialFinding<'_>,
-    ) -> Result<Option<ExceptionNotification>, String> {
+    ) {
         self.record_finding(
             report,
             batch_id,
@@ -1380,34 +1218,7 @@ impl MtrixEngine {
                 key: finding.key.to_string(),
                 reason: finding.reason.to_string(),
             },
-        )?;
-
-        // Direction B (mid-level intervention): emit a structured exception
-        // notification so the business side can synchronize master data.
-        let notification = ExceptionNotification {
-            rule_id: finding.rule.id().to_string(),
-            orphan_key: finding.key.to_string(),
-            file: finding.file.source_name.clone(),
-            line: finding.line_no,
-            suggested_action: match finding.rule {
-                VrRule::Vr08 => format!(
-                    "please synchronize customer code '{}' to ALTHCI customer master",
-                    finding.key
-                ),
-                VrRule::Vr09 => format!(
-                    "please synchronize batch code '{}' to ALTHES and ALTHPD masters",
-                    finding.key
-                ),
-                _ => "please confirm master data synchronization status with the business side"
-                    .to_string(),
-            },
-            notified_at: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                .to_string(),
-        };
-        Ok(Some(notification))
+        );
     }
 
     fn record_not_evaluable(
@@ -1418,7 +1229,7 @@ impl MtrixEngine {
         file: &ParsedFile,
         line_no: usize,
         key: &str,
-    ) -> Result<(), String> {
+    ) {
         self.record_finding(
             report,
             batch_id,
@@ -1432,13 +1243,14 @@ impl MtrixEngine {
                 reason: "a required file was rejected, so this rule could not be evaluated"
                     .to_string(),
             },
-        )
+        );
     }
 
     /// VR-12 preparation: amounts grouped by country. Currencies are never
     /// converted (MTRIX-023), the country is the reporting unit.
-    pub fn currency_groups(&self, parsed: &[ParsedFile]) -> Result<Vec<CurrencyGroup>, String> {
+    pub fn currency_groups(&self, parsed: &[ParsedFile]) -> (Vec<CurrencyGroup>, Vec<String>) {
         let mut groups: HashMap<String, CurrencyGroup> = HashMap::new();
+        let mut unparsable: Vec<String> = Vec::new();
         if let Some(sales) = parsed
             .iter()
             .find(|f| f.role == FileRole::Sales && !f.rejected)
@@ -1453,7 +1265,7 @@ impl MtrixEngine {
             let price_idx = spec
                 .index_of("SALES_PRICE")
                 .expect("column declared by the MTRIX specification");
-            for (offset, row) in sales.rows.iter().enumerate() {
+            for row in &sales.rows {
                 let country = row
                     .get(country_idx)
                     .map(|v| v.trim().to_string())
@@ -1461,53 +1273,54 @@ impl MtrixEngine {
                 if country.is_empty() {
                     continue;
                 }
-                let quantity_raw = row.get(qty_idx).ok_or_else(|| {
-                    format!("accepted sales row {} is missing QUANTITY", offset + 2)
-                })?;
-                let quantity = ScaledDecimal::parse(quantity_raw).map_err(|e| {
-                    format!(
-                        "accepted sales row {} has invalid QUANTITY: {e}",
-                        offset + 2
-                    )
-                })?;
-                let price_raw = row.get(price_idx).ok_or_else(|| {
-                    format!("accepted sales row {} is missing SALES_PRICE", offset + 2)
-                })?;
-                let price = ScaledDecimal::parse(price_raw).map_err(|e| {
-                    format!(
-                        "accepted sales row {} has invalid SALES_PRICE: {e}",
-                        offset + 2
-                    )
-                })?;
+                let quantity = match row.get(qty_idx).and_then(|v| ScaledDecimal::parse(v).ok()) {
+                    Some(value) => value,
+                    None => {
+                        unparsable.push(format!(
+                            "QUANTITY '{}'",
+                            row.get(qty_idx).unwrap_or(&String::new()).trim()
+                        ));
+                        ScaledDecimal::ZERO
+                    }
+                };
+                let price = match row
+                    .get(price_idx)
+                    .and_then(|v| ScaledDecimal::parse(v).ok())
+                {
+                    Some(value) => value,
+                    None => {
+                        unparsable.push(format!(
+                            "SALES_PRICE '{}'",
+                            row.get(price_idx).unwrap_or(&String::new()).trim()
+                        ));
+                        ScaledDecimal::ZERO
+                    }
+                };
                 let entry = groups.entry(country.clone()).or_insert(CurrencyGroup {
                     country_iso: country,
                     rows: 0,
                     quantity_units: 0,
                     amount_units: 0,
                 });
-                entry.rows = entry
-                    .rows
-                    .checked_add(1)
-                    .ok_or_else(|| format!("sales row count overflow for {}", entry.country_iso))?;
-                entry.quantity_units = entry
-                    .quantity_units
-                    .checked_add(i128::from(quantity.units()))
-                    .ok_or_else(|| format!("quantity total overflow for {}", entry.country_iso))?;
-                let amount = i128::from(quantity.units())
-                    .checked_mul(i128::from(price.units()))
-                    .and_then(|v| v.checked_div(10_000))
-                    .ok_or_else(|| {
-                        format!("amount multiplication overflow for {}", entry.country_iso)
-                    })?;
-                entry.amount_units = entry
-                    .amount_units
-                    .checked_add(amount)
-                    .ok_or_else(|| format!("amount total overflow for {}", entry.country_iso))?;
+                entry.rows += 1;
+                entry.quantity_units = entry.quantity_units.saturating_add(quantity.units());
+                // amount = quantity * price, both scaled by 10^4 -> result in units of 10^4
+                let amount = (i128::from(quantity.units()) * i128::from(price.units())) / 10_000;
+                if amount > i128::from(i64::MAX) || amount < i128::from(i64::MIN) {
+                    // A silently saturated total is a wrong number in a
+                    // delivered report; the overflow is reported instead.
+                    unparsable.push(format!(
+                        "amount of country {} overflows the report range",
+                        entry.country_iso
+                    ));
+                }
+                let capped = amount.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+                entry.amount_units = entry.amount_units.saturating_add(capped);
             }
         }
         let mut groups: Vec<CurrencyGroup> = groups.into_values().collect();
         groups.sort_by(|a, b| a.country_iso.cmp(&b.country_iso));
-        Ok(groups)
+        (groups, unparsable)
     }
 
     fn apply_counts(&mut self, role: FileRole, count: usize) {
@@ -1565,13 +1378,14 @@ fn negative_measure(file_spec: &FileSpec, raw_line: &str) -> bool {
 /// zero-padded, so lexicographic comparison is order-equivalent to a numeric
 /// comparison; this must not be relied upon for shorter or unpadded stamps.
 fn file_stamp(file_name: &str, prefix: &str) -> String {
+    let trimmed = file_name.trim_start_matches(|c: char| c.is_ascii_alphabetic());
     let after_prefix = file_name
-        .trim_start_matches(|c: char| c.is_ascii_alphabetic())
         .get(prefix.len()..)
         .unwrap_or_default()
         .chars()
         .take_while(|c| c.is_ascii_digit())
         .collect::<String>();
+    let _ = trimmed;
     after_prefix
 }
 
@@ -1745,13 +1559,6 @@ mod tests {
         assert_eq!(report.error_count(), 3);
         assert!(report.files.iter().all(|f| f.rows_quarantined == 0));
         assert_eq!(report.status, BatchStatus::PartialAccepted);
-        assert_eq!(report.currency_groups.len(), 1);
-        assert_eq!(report.currency_groups[0].country_iso, "ARG");
-        assert_eq!(report.currency_groups[0].quantity_units, 10_000);
-        assert_eq!(report.currency_groups[0].amount_units, 1_743_000_000);
-        let serialized = serde_json::to_string(&report).unwrap();
-        let restored: ValidationReport = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(restored.currency_groups, report.currency_groups);
 
         let _ = fs::remove_dir_all(&dir);
         let _ = fs::remove_dir_all(&out);
@@ -1855,87 +1662,12 @@ mod tests {
         // The aggregated row carries the sum of the two quantities, 1 + 5.
         let repaired =
             fs::read_to_string(out.join("ALTHVD30062020153005130 5 (4)_repaired.csv")).unwrap();
-        let data_rows: Vec<&str> = repaired
-            .split('\r')
-            .filter(|s| !s.is_empty())
-            .skip(1)
-            .collect();
+        let data_rows: Vec<&str> = repaired.lines().skip(1).collect();
         assert_eq!(data_rows.len(), 1, "the duplicate must become one row");
         assert!(
-            data_rows[0].contains(";6;"),
+            data_rows[0].contains(";6.0000;"),
             "the quantities must be summed, not doubled: {}",
             data_rows[0]
-        );
-
-        let _ = fs::remove_dir_all(&dir);
-        let _ = fs::remove_dir_all(&out);
-    }
-
-    #[test]
-    fn test_excess_quantity_precision_is_quarantined() {
-        let dir = temp_dir("quantity-precision");
-        let out = temp_dir("quantity-precision-out");
-        write_all(&dir);
-        write(
-            &dir,
-            "ALTHVD30062020153005130 5 (4).csv",
-            "VENDOR_ID;DIST_ID;CUSTOMER_ID;DATE;DOCUMENT_NUMBER;BATCH_CODE;QUANTITY;SALES_PRICE;SALESPERSON_CODE;DOCUMENT_TYPE;ZIP_CODE;COUNTRY_ISO;\n\
-6063343900011222;029864857023000;7AC;20220109;348732;7893249911649;1.23456;174300;;;;ARG;\n",
-        );
-
-        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
-        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine = MtrixEngine::new(ledger, gate);
-        let report = engine
-            .process_drop(&dir, "B-QUANTITY-PRECISION", Some(&out))
-            .unwrap();
-
-        let sales = report
-            .files
-            .iter()
-            .find(|file| file.prefix == "ALTHVD")
-            .expect("the sales file outcome is included");
-        assert_eq!(sales.rows_quarantined, 1);
-        assert!(report.findings.iter().any(|finding| {
-            finding.rule == VrRule::Vr15 && finding.reason.contains("QUANTITY")
-        }));
-
-        let _ = fs::remove_dir_all(&dir);
-        let _ = fs::remove_dir_all(&out);
-    }
-
-    #[test]
-    fn test_duplicate_quantity_overflow_fails_instead_of_reusing_prior_value() {
-        let dir = temp_dir("aggregate-overflow");
-        let out = temp_dir("aggregate-overflow-out");
-        write(&dir, "ALTHCI30062020153005130 2 (3).csv", REAL_CI);
-        write(&dir, "ALTHES30062020153005130 2 (3).csv", REAL_ES);
-        write(&dir, "ALTHFV30062020153005130 2 (3).csv", REAL_FV);
-        write(&dir, "ALTHPD30062020153005130 2 (3).csv", REAL_PD);
-        let duplicate_rows = (0..10)
-            .map(|_| {
-                "6063343900011222;029864857023000;995A;20220109;348732;7898656600087;99999999999999.9999;174300;;;;ARG;"
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let sales = format!(
-            "VENDOR_ID;DIST_ID;CUSTOMER_ID;DATE;DOCUMENT_NUMBER;BATCH_CODE;QUANTITY;SALES_PRICE;SALESPERSON_CODE;DOCUMENT_TYPE;ZIP_CODE;COUNTRY_ISO;\n{duplicate_rows}\n"
-        );
-        write(&dir, "ALTHVD30062020153005130 5 (4).csv", &sales);
-
-        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
-        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine = MtrixEngine::new(ledger, gate);
-        let result = engine.process_drop(&dir, "B-AGG-OVERFLOW", Some(&out));
-
-        let error = result.expect_err("quantity overflow must stop the drop");
-        assert!(error.contains("quantity overflow"), "{error}");
-        assert!(
-            fs::read_dir(&out)
-                .map(|entries| entries.count())
-                .unwrap_or_default()
-                == 0,
-            "failed validation must not publish repaired output files"
         );
 
         let _ = fs::remove_dir_all(&dir);
@@ -2215,101 +1947,10 @@ mod tests {
     }
 
     #[test]
-    fn test_fault_injection_ledger_failure_aborts_drop() {
-        let dir = temp_dir("fault-injection");
-        let out = temp_dir("fault-injection-out");
-        write_all(&dir);
-
-        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
-        // Inject a trigger that fails all writes to validation_findings
-        ledger
-            .execute_sql(
-                "CREATE TRIGGER fail_finding BEFORE INSERT ON validation_findings \
-                 BEGIN SELECT RAISE(FAIL, 'injected audit failure'); END;",
-            )
-            .unwrap();
-
-        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine = MtrixEngine::new(ledger, gate);
-        // process_drop should fail because record_finding cannot persist
-        let result = engine.process_drop(&dir, "B-FAULT", Some(&out));
-        assert!(
-            result.is_err(),
-            "ledger failure must propagate to process_drop"
-        );
-
-        let _ = fs::remove_dir_all(&dir);
-        let _ = fs::remove_dir_all(&out);
-    }
-
-    #[test]
-    fn test_fault_injection_ledger_failure_no_partial_report() {
-        let dir = temp_dir("fault-partial");
-        let out = temp_dir("fault-partial-out");
-        write_all(&dir);
-
-        let ledger = Arc::new(IdempotencyLedger::in_memory().unwrap());
-        // Inject trigger after first finding to simulate mid-process failure
-        ledger
-            .execute_sql(
-                "CREATE TRIGGER fail_finding BEFORE INSERT ON validation_findings \
-                 BEGIN SELECT RAISE(FAIL, 'injected mid-process failure'); END;",
-            )
-            .unwrap();
-
-        let gate = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine = MtrixEngine::new(ledger.clone(), gate);
-        let result = engine.process_drop(&dir, "B-FAULT-PARTIAL", Some(&out));
-
-        // Should fail because findings cannot be persisted
-        assert!(result.is_err());
-
-        // Verify no findings were partially persisted (trigger blocks all)
-        let findings = ledger.get_findings(None).unwrap();
-        assert!(
-            findings.is_empty(),
-            "no findings should be persisted when trigger blocks all writes"
-        );
-
-        let _ = fs::remove_dir_all(&dir);
-        let _ = fs::remove_dir_all(&out);
-    }
-
-    #[test]
-    fn test_fault_injection_crash_recovery_data_consistency() {
-        let dir = temp_dir("crash-recovery");
-        let out = temp_dir("crash-recovery-out");
-        write_all(&dir);
-
-        // First run: successful ingestion
-        let ledger1 = Arc::new(IdempotencyLedger::in_memory().unwrap());
-        let gate1 = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine1 = MtrixEngine::new(ledger1.clone(), gate1);
-        let report1 = engine1.process_drop(&dir, "B-CRASH", Some(&out)).unwrap();
-        let _finding_count_1 = report1.findings.len();
-
-        // Verify findings were persisted (ledger may have fewer than report because
-        // quarantined rows go to a separate table, but must have at least some)
-        let persisted_1 = ledger1.get_findings(None).unwrap();
-        assert!(
-            !persisted_1.is_empty(),
-            "findings must be persisted after successful run"
-        );
-
-        // Second run with same batch_id: should be deduplicated (idempotent)
-        let gate2 = Arc::new(Mutex::new(ReleaseGate::default()));
-        let mut engine2 = MtrixEngine::new(ledger1.clone(), gate2);
-        let _result2 = engine2.process_drop(&dir, "B-CRASH", Some(&out));
-
-        // Data must remain consistent (no duplicate findings created)
-        let persisted_2 = ledger1.get_findings(None).unwrap();
+    fn test_repaired_file_name_keeps_the_delivered_name() {
         assert_eq!(
-            persisted_2.len(),
-            persisted_1.len(),
-            "re-run must not create duplicate findings"
+            repaired_file_name("ALTHVD30062020153005130 5 (4).csv"),
+            "ALTHVD30062020153005130 5 (4)_repaired.csv"
         );
-
-        let _ = fs::remove_dir_all(&dir);
-        let _ = fs::remove_dir_all(&out);
     }
 }

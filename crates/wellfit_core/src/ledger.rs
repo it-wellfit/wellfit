@@ -90,70 +90,6 @@ pub struct Finding<'a> {
     pub reason: &'a str,
 }
 
-/// A persistent access audit record stored in the SQLite ledger.
-///
-/// Mirrored from [`crate::access_control::AccessRecord`] so that access
-/// decisions survive process restarts and can be queried for compliance
-/// audits (ISO/IEC 27001:2022 A.8.16).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AccessAuditRecord {
-    /// Database row identifier.
-    pub id: i64,
-    /// Unique access record identifier.
-    pub record_id: String,
-    /// User who made the request.
-    pub user_id: String,
-    /// Action attempted.
-    pub action: String,
-    /// Resource accessed.
-    pub resource: String,
-    /// Resource classification.
-    pub classification: String,
-    /// Permission level requested.
-    pub level: String,
-    /// Decision rendered (allowed/denied).
-    pub decision: String,
-    /// Whether a segregation-of-duties constraint was violated.
-    pub sod_violated: bool,
-    /// Source IP address (if available).
-    pub source_ip: Option<String>,
-    /// Whether MFA was used.
-    pub mfa_used: bool,
-    /// Whether the session was privileged.
-    pub privileged: bool,
-    /// Time the decision was made (UTC RFC3339).
-    pub decided_at: String,
-}
-
-/// Parameters for recording an access audit decision.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AccessAuditParams {
-    /// Unique access record identifier.
-    pub record_id: String,
-    /// User who made the request.
-    pub user_id: String,
-    /// Action attempted.
-    pub action: String,
-    /// Resource accessed.
-    pub resource: String,
-    /// Resource classification.
-    pub classification: String,
-    /// Permission level requested.
-    pub level: String,
-    /// Decision rendered (allowed/denied).
-    pub decision: String,
-    /// Whether a segregation-of-duties constraint was violated.
-    pub sod_violated: bool,
-    /// Source IP address (if available).
-    pub source_ip: Option<String>,
-    /// Whether MFA was used.
-    pub mfa_used: bool,
-    /// Whether the session was privileged.
-    pub privileged: bool,
-    /// Time the decision was made (UTC RFC3339).
-    pub decided_at: String,
-}
-
 /// How a ledger claims batches and order keys.
 ///
 /// The production ingestion policy is [`BatchScope::Exclusive`]: the content of
@@ -265,24 +201,6 @@ impl IdempotencyLedger {
                 updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_cumulative_balance_customer ON cumulative_balance(customer_id);
-            CREATE TABLE IF NOT EXISTS access_audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                record_id TEXT NOT NULL,
-                user_id TEXT NOT NULL,
-                action TEXT NOT NULL,
-                resource TEXT NOT NULL,
-                classification TEXT NOT NULL,
-                level TEXT NOT NULL,
-                decision TEXT NOT NULL,
-                sod_violated INTEGER NOT NULL DEFAULT 0,
-                source_ip TEXT,
-                mfa_used INTEGER NOT NULL DEFAULT 0,
-                privileged INTEGER NOT NULL DEFAULT 0,
-                decided_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_access_audit_user ON access_audit_log(user_id);
-            CREATE INDEX IF NOT EXISTS idx_access_audit_decided_at ON access_audit_log(decided_at);
-            CREATE INDEX IF NOT EXISTS idx_access_audit_decision ON access_audit_log(decision);
             "#
         )?;
         // Backward compatible migration: databases created by earlier versions do
@@ -528,83 +446,7 @@ impl IdempotencyLedger {
         Ok(())
     }
 
-    /// Log an access control decision to the persistent audit trail.
-    ///
-    /// Records the outcome of an [`AccessController`] evaluation so that every
-    /// access attempt (allowed or denied) is traceable for compliance audits
-    /// (ISO/IEC 27001:2022 A.8.16 Monitoring Behaviour).
-    pub fn log_access(&self, params: AccessAuditParams) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            r#"
-            INSERT INTO access_audit_log
-                (record_id, user_id, action, resource, classification, level, decision,
-                 sod_violated, source_ip, mfa_used, privileged, decided_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
-            "#,
-            params![
-                params.record_id,
-                params.user_id,
-                params.action,
-                params.resource,
-                params.classification,
-                params.level,
-                params.decision,
-                params.sod_violated as i64,
-                params.source_ip,
-                params.mfa_used as i64,
-                params.privileged as i64,
-                params.decided_at
-            ],
-        )?;
-        Ok(())
-    }
-
-    /// Read back all access audit records.
-    pub fn get_access_audit_log(&self) -> Result<Vec<AccessAuditRecord>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            r#"
-            SELECT id, record_id, user_id, action, resource, classification, level,
-                   decision, sod_violated, source_ip, mfa_used, privileged, decided_at
-            FROM access_audit_log ORDER BY id
-            "#,
-        )?;
-        let rows = stmt.query_map([], Self::map_access_audit_row)?;
-        let mut items = Vec::new();
-        for r in rows {
-            items.push(r?);
-        }
-        Ok(items)
-    }
-
-    fn map_access_audit_row(row: &rusqlite::Row) -> Result<AccessAuditRecord> {
-        Ok(AccessAuditRecord {
-            id: row.get(0)?,
-            record_id: row.get(1)?,
-            user_id: row.get(2)?,
-            action: row.get(3)?,
-            resource: row.get(4)?,
-            classification: row.get(5)?,
-            level: row.get(6)?,
-            decision: row.get(7)?,
-            sod_violated: row.get::<_, i64>(8)? != 0,
-            source_ip: row.get(9)?,
-            mfa_used: row.get::<_, i64>(10)? != 0,
-            privileged: row.get::<_, i64>(11)? != 0,
-            decided_at: row.get(12)?,
-        })
-    }
-
-    /// Execute an arbitrary SQL batch on the underlying connection.
-    ///
-    /// This is primarily intended for testing (e.g., injecting fault triggers).
-    /// In production, use the structured methods (log_finding, log_quarantine, etc.).
-    pub fn execute_sql(&self, sql: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute_batch(sql)?;
-        Ok(())
-    }
+    /// Read back the findings of a batch, or of every batch.
     pub fn get_findings(&self, batch_id: Option<&str>) -> Result<Vec<FindingRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = if batch_id.is_some() {
@@ -758,55 +600,6 @@ mod tests {
         let items = ledger.get_quarantine_items(Some("B1")).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].error_code, "ERR_BAD_SYNTAX");
-    }
-
-    #[test]
-    fn test_quarantine_write_failure_is_returned() {
-        let ledger = IdempotencyLedger::in_memory().unwrap();
-        ledger
-            .conn
-            .lock()
-            .unwrap()
-            .execute_batch(
-                "CREATE TRIGGER fail_quarantine BEFORE INSERT ON quarantine_log \
-                 BEGIN SELECT RAISE(FAIL, 'injected audit failure'); END;",
-            )
-            .unwrap();
-
-        let result = ledger.log_quarantine(
-            "B1",
-            "test.csv",
-            2,
-            "bad_line",
-            "ERR_BAD_SYNTAX",
-            "Failed arithmetic",
-        );
-        assert!(result.is_err(), "database failure must reach the caller");
-    }
-
-    #[test]
-    fn test_finding_write_failure_is_returned() {
-        let ledger = IdempotencyLedger::in_memory().unwrap();
-        ledger
-            .conn
-            .lock()
-            .unwrap()
-            .execute_batch(
-                "CREATE TRIGGER fail_finding BEFORE INSERT ON validation_findings \
-                 BEGIN SELECT RAISE(FAIL, 'injected audit failure'); END;",
-            )
-            .unwrap();
-
-        let result = ledger.log_finding(Finding {
-            batch_id: "B1",
-            rule_code: "VR-01",
-            severity: FindingSeverity::Warning,
-            filename: "test.csv",
-            line_number: 2,
-            key_value: "key",
-            reason: "test finding",
-        });
-        assert!(result.is_err(), "database failure must reach the caller");
     }
 
     #[test]

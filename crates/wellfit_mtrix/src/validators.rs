@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Wellfit MTRIX - Validation Rule Engine (VR-01 .. VR-12)
 //!
@@ -16,7 +16,6 @@
 //! field whose mandatory-ness is unknown is therefore a `Warning`, never a
 //! rejection: the row is kept and the caveat is reported.
 
-use crate::repairs::AppliedRepair;
 use serde::{Deserialize, Serialize};
 
 /// A validation rule from the MTRIX rule set.
@@ -296,29 +295,7 @@ pub struct Deviation {
     pub canonical_name: String,
     /// Open issue in the MTRIX issue register.
     pub issue_id: String,
-    /// Page in the original manual.
-    pub manual_page: u16,
-}
 
-/// Exception notification for cross-file referential findings (VR-08, VR-09).
-///
-/// Direction B (mid-level intervention): the engine lists the offending key
-/// and emits a structured notification so the business side can synchronize
-/// the master data. The row itself is retained, not rejected.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExceptionNotification {
-    /// Rule identifier, e.g. `VR-08` or `VR-09`.
-    pub rule_id: String,
-    /// The orphan key value that could not be resolved.
-    pub orphan_key: String,
-    /// File where the finding was recorded.
-    pub file: String,
-    /// 1-based line number.
-    pub line: usize,
-    /// Suggested action for the business side.
-    pub suggested_action: String,
-    /// UTC notification timestamp.
-    pub notified_at: String,
 }
 
 /// Per-rule counters.
@@ -367,9 +344,9 @@ pub struct CurrencyGroup {
     /// Number of sales rows in the group.
     pub rows: usize,
     /// Sum of quantities, scaled by 10^4.
-    pub quantity_units: i128,
+    pub quantity_units: i64,
     /// Sum of quantity multiplied by unit price, scaled by 10^8.
-    pub amount_units: i128,
+    pub amount_units: i64,
 }
 
 /// The complete validation report for one drop.
@@ -397,10 +374,6 @@ pub struct ValidationReport {
     pub currency_groups: Vec<CurrencyGroup>,
     /// Number of repairs applied.
     pub repairs_applied: usize,
-    /// Detailed list of repairs applied (file, line, column, rule, before, after).
-    pub repairs: Vec<AppliedRepair>,
-    /// Exception notifications for cross-file referential findings (direction B).
-    pub exceptions: Vec<ExceptionNotification>,
 }
 
 impl ValidationReport {
@@ -426,15 +399,13 @@ impl ValidationReport {
                 fields_declared: 0,
                 fields_with_provenance: 0,
                 rules_declared: VrRule::all().len(),
-                rules_implemented: VrRule::all().len() - 1, // VR-12 is a catalogue entry, not implemented
+                rules_implemented: VrRule::all().len(),
                 rules_from_field_dictionary: VrRule::L2_DECLARED,
                 rules_from_original_manual: VrRule::MANUAL_DERIVED,
                 files_with_snapshot_page: crate::spec::MANUAL_PDF_PAGE.len(),
             },
             currency_groups: Vec::new(),
             repairs_applied: 0,
-            repairs: Vec::new(),
-            exceptions: Vec::new(),
         }
     }
 
@@ -670,6 +641,17 @@ pub fn check_code(value: &str, allowed: &[&str]) -> CodeCheck {
     }
 }
 
+
+/// Exception notification for cross-file referential findings (VR-08, VR-09).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExceptionNotification {
+    pub rule_id: String,
+    pub orphan_key: String,
+    pub file: String,
+    pub line: usize,
+    pub suggested_action: String,
+    pub notified_at: String,
+}
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -68,7 +68,7 @@
 ## 5. 未完成 / 受阻需求
 
 | 需求/議題 | 編號 | 狀態 | 阻礙 |
-|---|---|---|---|
+|-----------|------|------|------|
 | CP 格式驗證 | C-01 / MTRIX-001 | 待對接方 | CP 格式未定義 |
 | VR-12 管理報表核對 | C-02 / G-07 | 待對接方 | 管理報表來源未取得 |
 | 逐欄 Mandatory 清單 | C-03 / MTRIX-003 | 待對接方 | 清單不可得 |
@@ -80,8 +80,44 @@
 | 管線接線 | Phase 2 | 未開始 | 需重構 process_drop |
 | 規則/欄位外置化 | Phase 3 | 未開始 | 需設計 TOML/JSON schema |
 
-## 6. 追溯鏈
-需求 → 規格（`Knowledge/specs/`）→ 架構（`docs/ARCHITECTURE.md`）→ Ticket（`PLAN.md`）→ 程式碼（`crates/`）→ 測試（`#[test]`）→ 驗收證據（`scripts/check.ps1` golden parity）→ 版本（git tag `v1.0.6`）
+## 6. BankPay 需求追溯（E.Sun V2.8）
 
-## 7. 更新條件
-本矩陣應在每次新增/修改需求、規則或測試時同步更新。每次版本發布後應重新驗證 golden parity。
+| 需求 ID | 需求 | 設計文件 | 介面規格 | 實作位置 | 測試 | 狀態 |
+|---------|------|----------|----------|----------|------|------|
+| BP-01 | TWD 付款放行 | `docs/bankpay/03-technical-design.md` §2 | `docs/bankpay/04-interface-specification.md` §2 | `crates/wellfit_bankpay/src/bankpay.rs` `export_vouchers` / `build_twd_payment_request` | `test_export_vouchers_dedup_and_lock`, `test_export_isolates_bad_amount`, `test_assemble_media_file_and_sha256` | 已實作（mock 可測） |
+| BP-02 | TWD 交易狀態查詢 | `docs/bankpay/03-technical-design.md` §2 | `docs/bankpay/04-interface-specification.md` §3 | `crates/wellfit_bankpay/src/http.rs` `retrieve_twd_status` / `crates/wellfit_bankpay/src/bankpay.rs` `query_twd_status` | `test_query_voucher`, `test_query_tx`, `test_query_batch` | 已實作（mock 可測） |
+| BP-03 | 交易明細查詢 | `docs/bankpay/03-technical-design.md` §2 | `docs/bankpay/04-interface-specification.md` §4 | 未整合進 `bankpay.rs`（HTTP client 現有 `post_json` 可複用） | — | P3 後續 |
+| BP-04 | FX 預檢與放行 | `docs/bankpay/04-interface-specification.md` §5-6 | `docs/bankpay/04-interface-specification.md` §5-6 | `api.rs` 已定義 `validateFxPaymentInstruction` 模型，未整合進引擎 | — | P3 後續 |
+| BP-05 | 帳戶餘額查詢 | `docs/bankpay/04-interface-specification.md` §7 | `docs/bankpay/04-interface-specification.md` §7 | 未整合進 `bankpay.rs` | — | P3 後續 |
+| BP-06 | 付款結果列印 | `docs/bankpay/04-interface-specification.md` §9 | `docs/bankpay/04-interface-specification.md` §9 | 未整合進 `bankpay.rs` | — | P3 後續 |
+| BP-07 | 媒體檔 422-char BIG-5 | `docs/bankpay/03-technical-design.md` §3 | `docs/bankpay/04-interface-specification.md` §1 | `crates/wellfit_bankpay/src/media.rs` `assemble_twd_media_file` | `test_assemble_media_file_and_sha256`, `test_base64_roundtrip` | 已實作 |
+| BP-08 | 編碼轉換 UTF-8↔CP950/Big5 | `docs/bankpay/03-technical-design.md` §1 | `docs/bankpay/04-interface-specification.md` §1 | `crates/wellfit_bankpay/src/encoding.rs` `to_utf8` / `from_utf8` | `test_detect_utf8_bom`, `test_from_utf8_round_trip`, `test_cp950_label` | 已實作 |
+| BP-09 | 冪等鍵防重複 | `docs/bankpay/03-technical-design.md` §5 | `docs/bankpay/08-open-questions-and-decisions.md` ADR-BP-003 | `crates/wellfit_bankpay/src/bankpay.rs` `export_vouchers` (idempotency lock) | `test_export_vouchers_dedup_and_lock` | 已實作 |
+| BP-10 | 發布閘門狀態機 | `docs/bankpay/03-technical-design.md` §6 | `docs/bankpay/05-security-and-audit.md` §6.3 | `crates/wellfit_bankpay/src/release.rs` / `crates/wellfit_core/src/release_gate.rs` | `test_verify_and_dispatch_flow`, `test_uncertain_dispatch_reconciliation`, `test_reject_quarantines` | 已實作 |
+| BP-11 | 追溯查詢 | `docs/bankpay/03-technical-design.md` §9 | `docs/bankpay/04-interface-specification.md` §1 | `crates/wellfit_bankpay/src/query.rs` `query` | `test_query_voucher`, `test_query_tx`, `test_query_batch`, `test_query_rejects_unknown_kind` | 已實作 |
+| BP-12 | 稽核 Finding | `docs/bankpay/03-technical-design.md` §5 | `docs/bankpay/05-security-and-audit.md` §6 | `crates/wellfit_bankpay/src/bankpay.rs` `log_finding` / `log_quarantine` | `test_import_results_records_findings` | 已實作 |
+| BP-13 | API 結果代碼 | `docs/bankpay/05-security-and-audit.md` §4 | `docs/bankpay/04-interface-specification.md` §11 | `crates/wellfit_bankpay/src/api.rs` `api_result` | `test_api_result_success`, `test_api_response_failure_no_data` | 已實作 |
+| BP-14 | 交易狀態代碼 | `docs/bankpay/05-security-and-audit.md` §5 | `docs/bankpay/04-interface-specification.md` §11 | `crates/wellfit_bankpay/src/api.rs` `tx_status` | `test_tx_status_success`, `test_tx_status_pending`, `test_tx_status_failed` | 已實作 |
+
+## 7. BankPay 核心不變量
+
+| 不變量 | 實作位置 | 測試 |
+|--------|----------|------|
+| 零 `unsafe` | 每個 `.rs` 第一行 `#![forbid(unsafe_code)]` | clippy + cargo check |
+| Clippy 零警告 | `cargo clippy --workspace --all-targets -- -D warnings` | CI |
+| 金額不用浮點 | `ScaledDecimal`（`wellfit_core::scaled`） | `test_no_binary_floating_point_drift` |
+| 欄位以名稱解析 | `ColumnContract`（`wellfit_core::contract`） | `test_never_falls_back_to_a_position` |
+| 批次冪等（批次 ID + SHA-256） | `IdempotencyLedger`（`wellfit_core::ledger`） | `test_the_same_drop_cannot_be_ingested_twice` |
+| API 結果代碼 910000=成功 | `api.rs` `api_result::is_success` | `test_api_result_success` |
+| 媒體檔固定長度 422 | `media.rs` `assemble_twd_media_file` | `test_assemble_media_file_and_sha256` |
+
+## 8. 未完成 / 受阻需求（BankPay）
+
+| 需求/議題 | 編號 | 狀態 | 阻礙 |
+|-----------|------|------|------|
+| HTTP 客戶端憑證釘選 | BP-TLS | 待實作 | `http.rs` `EsunHttpClient` 有 `client_cert_path` 等欄位，但 `post_json` 尚未載入 rustls 憑證；需銀行憑證可用後實作 |
+| FlapsErp COM 介面 | OQ-E3 | 待確認 | 需向 ERP 廠商取得 ProgID/方法，或確認 HTTP API 可取代 |
+| 沙箱認證與 UAT | OQ-E3 | 待銀行交付 | E.Sun 帳戶經理提供 SourceSystemId、ClientId、啟用碼、憑證 |
+| 整合測試（mock 元件） | BP-INT | 待建置 | 根據 V2.8 規格建構 mock 安全元件供 CI 測試 |
+| FX 波次整合 | BP-04, BP-05, BP-06 | P3 後續 | TWD 優先；FX 為後續波次 |
+

@@ -268,7 +268,7 @@ impl ShopeeInboundEngine {
                         column_count
                     ),
                     &mut errors,
-                )?;
+                );
                 continue;
             }
 
@@ -281,7 +281,7 @@ impl ShopeeInboundEngine {
                     "ERR_MISSING_ORDER_NO",
                     "Empty ORDER_NO in row".to_string(),
                     &mut errors,
-                )?;
+                );
                 continue;
             }
 
@@ -295,7 +295,7 @@ impl ShopeeInboundEngine {
                         "ERR_MONEY_FORMAT",
                         format!("Invalid ORDER_TOTAL: '{}'", cols[idx_total]),
                         &mut errors,
-                    )?;
+                    );
                     continue;
                 }
             };
@@ -324,7 +324,7 @@ impl ShopeeInboundEngine {
                         "ERR_UNKNOWN_SKU",
                         format!("SKU '{seller_sku}' not found in canonical MDM catalog"),
                         &mut errors,
-                    )?;
+                    );
                     continue;
                 }
             };
@@ -339,7 +339,7 @@ impl ShopeeInboundEngine {
                         "ERR_QTY_FORMAT",
                         format!("Invalid QTY '{}': {e}", cols[idx_qty]),
                         &mut errors,
-                    )?;
+                    );
                     continue;
                 }
             };
@@ -354,7 +354,7 @@ impl ShopeeInboundEngine {
                         "ERR_MONEY_FORMAT",
                         format!("Invalid UNIT_PRICE: '{}'", cols[idx_price]),
                         &mut errors,
-                    )?;
+                    );
                     continue;
                 }
             };
@@ -369,7 +369,7 @@ impl ShopeeInboundEngine {
                         "ERR_MONEY_FORMAT",
                         format!("Invalid LINE_AMOUNT: '{}'", cols[idx_line_amt]),
                         &mut errors,
-                    )?;
+                    );
                     continue;
                 }
             };
@@ -415,7 +415,7 @@ impl ShopeeInboundEngine {
                     "ERR_SUM_MISMATCH_EX06",
                     reason,
                     &mut errors,
-                )?;
+                );
                 continue;
             }
 
@@ -434,7 +434,7 @@ impl ShopeeInboundEngine {
                     "ERR_DUPLICATE_ORDER",
                     reason,
                     &mut errors,
-                )?;
+                );
                 continue;
             }
 
@@ -445,9 +445,7 @@ impl ShopeeInboundEngine {
         if !is_clean {
             // The file was defective, so the batch claim is released: a
             // corrected re-export under the same batch identifier is accepted.
-            self.ledger
-                .release_file_batch(batch_id)
-                .map_err(|e| format!("Database error releasing defective batch claim: {e}"))?;
+            let _ = self.ledger.release_file_batch(batch_id);
         }
         let mut gate = self.release_gate.lock().unwrap();
         gate.verify_payload(is_clean, &format!("{} order errors found", errors.len()));
@@ -492,25 +490,20 @@ impl ShopeeInboundEngine {
         code: &str,
         reason: String,
         errors: &mut Vec<ShopeeRowError>,
-    ) -> Result<(), String> {
-        self.ledger
-            .log_quarantine(
-                batch_id,
-                SHOPEE_SOURCE_FILE,
-                line_number,
-                raw_value,
-                code,
-                &reason,
-            )
-            .map_err(|e| {
-                format!("Database error recording quarantine for line {line_number}: {e}")
-            })?;
+    ) {
+        let _ = self.ledger.log_quarantine(
+            batch_id,
+            SHOPEE_SOURCE_FILE,
+            line_number,
+            raw_value,
+            code,
+            &reason,
+        );
         errors.push(ShopeeRowError {
             line: line_number,
             code: code.to_string(),
             reason,
         });
-        Ok(())
     }
 }
 

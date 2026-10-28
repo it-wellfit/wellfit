@@ -78,7 +78,7 @@ Implications:
 | Status query latency | < 3 s per batch (≤500 items) | p95 measured |
 | Reconciliation accuracy | 100% voucher↔bank match | Automated traceable query |
 | Audit completeness | 100% of API calls logged with payload hash | Ledger findings count |
-| Test coverage | ≥ 18 unit tests green | `cargo test -p wellfit_bankpay` |
+| Test coverage | ≥ 32 unit tests green | `cargo test -p wellfit_bankpay` |
 
 ---
 

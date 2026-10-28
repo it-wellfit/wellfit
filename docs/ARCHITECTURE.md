@@ -1,4 +1,4 @@
-﻿# Wellfit 架構說明（ARCHITECTURE）
+# Wellfit 架構說明（ARCHITECTURE）
 
 > 文件編號：WFLT-DOC-ARC-001｜狀態：Draft｜版本：v1.0｜日期：2026-10-20
 > 撰寫：Wellfit 知識庫維護者｜審閱：未審閱｜核准：未核准
@@ -68,7 +68,7 @@
   apply_cross_file_rules()                  ── VR-08/09/10/11/13/14：列出鍵值、保留列
         │
         ▼
-  currency_groups()                         ── 依 COUNTRY_ISO 分組，i128 checked sum，10^4 / 10^8 縮放，不換算幣別
+  currency_groups()                         ── 依 COUNTRY_ISO 分組，10^4 / 10^8 縮放，不換算幣別
         │
         ▼
   ValidationReport（JSON） + 修復輸出檔 + SQLite 帳本
@@ -104,11 +104,7 @@
   發布（recipients）
 ```
 
-### 2.4 可插拔管線（`pipeline.rs`）
-
-`crates/wellfit_mtrix/src/pipeline.rs` 提供 `PipelineStage` trait 與 `Pipeline` 容器，
-支援 Parse / Repair / Validate / Aggregate / CrossFile / Report / Output 七階段可插拔、可跳過、可重排，
-共享 `PipelineContext`。目前為基礎架構（階段實作逐步遷入，行為等價目標）。
+## 3. 三個關鍵基礎模組
 
 ### 3.1 `contract` — 名稱解析的欄位契約
 
@@ -138,12 +134,10 @@ pub fn split_fields(line: &str, delim: char) -> Vec<String>
 ### 3.3 `scaled` — 定點十進位
 
 ```rust
-pub struct ScaledDecimal { units: i64 }   // fixed 10^4 scale
+pub struct ScaledDecimal { units: i64, scale: u32 }   // 10^4
 ```
 
 - 解析、加總、輸出皆為整數運算；加總使用 `checked_add`，溢位回傳 `None`。
-- 輸入超過四位小數或格式不合法時明確拒絕，不隱式捨入或截斷。
-- 國別數量總計以 `10^4` 縮放、數量乘價格總計以 `10^8` 縮放；使用 `i128` checked arithmetic，無法精確表示或溢位時明確失敗。
 - 蝦皮金額另以 `i64` 分為單位；兩者之間不做浮點換算。
 
 ## 4. MTRIX 契約面（`wellfit_mtrix::spec`）
@@ -179,31 +173,9 @@ pub struct FieldSpec {
 
 | 元件 | 職責 |
 |---|---|
-| `IdempotencyLedger`（SQLite） | 批次去重（批次 ID + SHA-256）、隔離記錄（原值完整保留）、`validation_findings` 查詢、`severity`＋`rule_code`；`cumulative_balance` 表（客戶層累計，`MdmCatalog::new` 初始化） |
-| `MdmCatalog::count_file_batches` | 提供已登記批次數（`IdempotencyLedger` 的唯讀查詢 API） |
+| `IdempotencyLedger`（SQLite） | 批次去重（批次 ID + SHA-256）、隔離記錄（原值完整保留）、`validation_findings` 查詢、`severity`＋`rule_code` |
 | `Mutex`（桌面互斥鎖） | 跨工作流互斥；自訂波次與逾時鎖回收 |
 | `ReleaseGate` | 驗證通過才可發布；白名單網域；失敗轉 `Quarantined` |
-
-### 5.1 Release Gate 狀態機
-
-`wellfit_core::release_gate::ReleaseGate`（來源檔 `src/release_gate.rs`）實現 Two-Way Door vs One-Way Door 邊界：
-
-| 狀態 | 說明 |
-|---|---|
-| `DraftGenerated` | 初始狀態；尚未驗證 |
-| `VerifiedPass` | 驗證通過（Two-Way Door）；允許發布 |
-| `Quarantined` | 驗證失敗；不發布，保留原值 |
-| `AuthorizedDispatch` | 發送已啟動（One-Way Door）；中途狀態 |
-| `Completed` | 發送成功或 `DispatchUncertain` 之狀態確認後為已送達 |
-| `Failed` | 發送明確失敗 |
-| `DispatchUncertain` | 發送逾時／不明，須執行 `reconcile_uncertain_dispatch` 確認 |
-
-**轉移邏輯**：
-- `verify_payload(is_valid, reason)` → Two-Way Door：`true` 至 `VerifiedPass`，`false` 至 `Quarantined`。
-- `validate_recipients(recipients)` → 驗證收件人地址格式與白名單網域。
-- `dispatch(transport_fn, recipients)` → One-Way Door：僅 `VerifiedPass`／`AuthorizedDispatch` 可呼叫；`Ok(true)` → `Completed`，`Ok(false)` → `Failed`，逾時 → `DispatchUncertain`。
-- `reconcile_uncertain_dispatch(status_check_fn)` → 逾時後的狀態確認：對端收到 → `Completed`；否則回 `VerifiedPass` 允許重送。
-- 所有轉移均附加到 `history: Vec<TransitionRecord>`，提供稽核線索。
 
 ## 6. CLI
 

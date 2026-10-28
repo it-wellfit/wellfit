@@ -79,40 +79,33 @@ pub struct TwdMediaRecord {
 /// Format a single 422-char record.
 fn format_twd_record(rec: &TwdMediaRecord, _seq: usize) -> Result<String, String> {
     // Pad or truncate each field to its fixed width.
-    // Field widths per E.Sun V2.8 Section 五 (approximate):
-    // payer_account_no: 16, payer_id: 15, payee_bank_id: 3, payee_branch_id: 4,
-    // payee_account_no: 16, payee_name: 80 (full-width 2 each), payee_id: 15,
-    // tx_date: 8, tx_amt: 13, charge_fee_type: 1, memo: 80, notify_method: 1,
-    // notify_email: 400... but total is 422, so we use a simplified layout.
-    //
-    // NOTE: The exact field positions in the 422-char record are defined in
-    // the bank's media file spec. This implementation uses a best-effort
-    // layout that sums to 422. When the bank provides the exact spec, adjust
-    // the widths here.
     let mut s = String::with_capacity(RECORD_LENGTH);
 
-    // Simplified layout (widths must sum to 422):
-    // 16 + 15 + 3 + 4 + 16 + 40 + 15 + 8 + 13 + 1 + 40 + 1 + 40 + 20 + 40 + 38 + 22 + 30 = 422
+    // Field widths per E.Sun V2.8 Section 5 / interface specification:
+    // payer_account_no: 16, payer_id: 15, payee_bank_id: 3, payee_branch_id: 4,
+    // payee_account_no: 16, payee_name: 80 (full-width 2 each), payee_id: 15,
+    // tx_date: 8, tx_amt: 13, charge_fee_type: 1, memo: 80 (full-width 2 each),
+    // notify_method: 1, notify_email: 40, notify_fax: 20, write_off_no: 40,
+    // remark: 38, tx_seq: 22, trailing: 10 (sums to 422).
     s.push_str(&pad(&rec.payer_account_no, 16));
     s.push_str(&pad(&rec.payer_id, 15));
     s.push_str(&pad(&rec.payee_bank_id, 3));
     s.push_str(&pad(&rec.payee_branch_id, 4));
     s.push_str(&pad(&rec.payee_account_no, 16));
-    s.push_str(&pad(&rec.payee_name, 40));
+    s.push_str(&pad(&rec.payee_name, 80));
     s.push_str(&pad(&rec.payee_id, 15));
     s.push_str(&pad(&rec.tx_date, 8));
     s.push_str(&pad(&rec.tx_amt, 13));
     s.push_str(&pad(&rec.charge_fee_type, 1));
-    s.push_str(&pad(&rec.memo, 40));
+    s.push_str(&pad(&rec.memo, 80));
     s.push_str(&pad(&rec.notify_method, 1));
     s.push_str(&pad(&rec.notify_email, 40));
     s.push_str(&pad(&rec.notify_fax, 20));
     s.push_str(&pad(&rec.write_off_no, 40));
     s.push_str(&pad(&rec.remark, 38));
     s.push_str(&pad(&rec.tx_seq, 22));
-    // Remaining: 422 - 332 = 90
-    s.push_str(&pad("", 90));
-
+    // Remaining: 422 - 412 = 10
+    s.push_str(&pad("", 10));
     if s.chars().count() != RECORD_LENGTH {
         return Err(format!(
             "record length mismatch: {} (expected {})",
