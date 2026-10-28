@@ -94,9 +94,6 @@ enum Commands {
         /// Ledger database path
         #[arg(long, default_value = DEFAULT_LEDGER)]
         db: PathBuf,
-        /// Export validated data as JSON for knowledge ingestion (Phase 2)
-        #[arg(long)]
-        export_knowledge: Option<PathBuf>,
     },
     /// Wave 1 - Shopee inbound orders to the Fuyi ERP import batch.
     Shopee {
@@ -148,6 +145,9 @@ enum Commands {
         /// Ledger database path
         #[arg(long, default_value = DEFAULT_LEDGER)]
         db: PathBuf,
+        /// Export validated data as JSON for knowledge ingestion
+        #[arg(long)]
+        export_knowledge: Option<PathBuf>,
     },
     /// Full physical audit over the real files in the data folder.
     Audit {
@@ -488,10 +488,7 @@ fn open_ledger_scoped(
 
 fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
     match &cli.command {
-        Commands::Status {
-            db,
-            export_knowledge,
-        } => run_status(ui, db, export_knowledge.as_deref()),
+        Commands::Status { db } => run_status(ui, db),
         Commands::Shopee {
             input,
             output,
@@ -511,6 +508,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             strict,
             batch,
             db,
+            export_knowledge,
         } => run_mtrix(
             ui,
             dir,
@@ -519,7 +517,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
             *strict,
             batch,
             db,
-            None,
+            export_knowledge.as_deref(),
         ),
         Commands::Audit {
             data_dir,
@@ -539,7 +537,7 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
 
 // ---------------------------------------------------------------- status
 
-fn run_status(ui: &UiConfig, db: &Path, _export_knowledge: Option<&Path>) -> Result<i32, String> {
+fn run_status(ui: &UiConfig, db: &Path) -> Result<i32, String> {
     let spin = Spinner::new("reading ledger state...", ui.color_enabled());
     let ledger = open_ledger(ui, db)?;
     let quarantined = ledger
