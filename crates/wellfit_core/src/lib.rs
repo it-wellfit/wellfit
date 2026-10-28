@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Wellfit Core - Common Infrastructure and Sovereign Governance Substrate
 //!
@@ -7,7 +7,9 @@
 //! arithmetic used by the MTRIX measures.
 
 pub mod access_control;
+pub mod config_validator;
 pub mod contract;
+pub mod error_codes;
 pub mod federation;
 pub mod jit_permission;
 pub mod ledger;
@@ -18,7 +20,9 @@ pub mod scaled;
 pub mod text;
 
 pub use access_control::*;
+pub use config_validator::*;
 pub use contract::*;
+pub use error_codes::*;
 pub use federation::*;
 pub use jit_permission::*;
 pub use ledger::*;

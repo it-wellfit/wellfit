@@ -1,43 +1,42 @@
 ﻿<!DOCTYPE html>
-<html lang="zh-TW">
+<html lang='zh-TW'>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset='UTF-8'>
 <title>Wellfit System Architecture & Flowcharts</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src='https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'></script>
 <style>
-  body { font-family: "Microsoft JhengHei", "Segoe UI", sans-serif; margin: 40px; line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px; }
-  h1 { color: #1a365d; border-bottom: 3px solid #2b6cb0; padding-bottom: 10px; }
-  h2 { color: #2b6cb0; border-bottom: 1px solid #bee3f8; padding-bottom: 5px; margin-top: 30px; }
-  h3 { color: #2c5282; margin-top: 20px; }
-  table { border-collapse: collapse; width: 100%; margin: 15px 0; }
-  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-  th { background-color: #2b6cb0; color: white; font-weight: bold; }
-  tr:nth-child(even) { background-color: #f7fafc; }
-  code { background-color: #edf2f7; padding: 2px 6px; border-radius: 3px; font-family: "Consolas", monospace; font-size: 14px; }
-  pre { background-color: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow-x: auto; }
-  pre code { background: none; color: inherit; }
-  blockquote { border-left: 4px solid #3182ce; padding: 10px 15px; margin: 15px 0; background: #ebf8ff; }
-  .mermaid { text-align: center; margin: 20px 0; }
-  .no-print { text-align: center; color: #666; font-size: 12px; margin-top: 40px; }
-  @media print { body { margin: 20px; } .no-print { display: none; } }
+body { font-family: 'Microsoft JhengHei', 'Segoe UI', sans-serif; margin: 20px; background: #f5f5f5; }
+h1 { color: #1a365d; text-align: center; }
+h2 { color: #2b6cb0; border-bottom: 2px solid #bee3f8; padding-bottom: 5px; margin-top: 30px; }
+.diagram { background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; }
+.mermaid { text-align: center; }
+.toc { background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.toc a { color: #2b6cb0; text-decoration: none; display: block; padding: 4px 0; }
+.toc a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
-<div id="content"></div>
-<script>
-mermaid.initialize({ startOnLoad: false, theme: 'default' });
-const markdown = $([System.Web.HttpUtility]::JavaScriptStringEncode(# Wellfit Enterprise Platform - Complete System Flowcharts & Architecture
-
-> Document ID: KNB-VISUAL-001 | Status: Active | Version: v1.0 | Date: 2026-10-26
-> Format: Markdown with Mermaid diagrams (compatible with GitHub, GitLab, VS Code, Obsidian)
-
----
-
-## 1. System Architecture Overview
-
-<div class="mermaid">
+<h1>Wellfit Enterprise Platform - Complete System Flowcharts & Architecture</h1>
+<p style='text-align:center;color:#666;'>Document ID: KNB-VISUAL-001 | Version: v1.0 | Date: 2026-10-26</p>
+<div class='toc'><h2>目錄 (Table of Contents)</h2>
+<a href='#section-1'>1. System Architecture Overview</a>
+<a href='#section-2'>2. MTRIX Processing Pipeline</a>
+<a href='#section-3'>3. Access Control Flow (RBAC/ABAC)</a>
+<a href='#section-4'>4. JIT Permission Workflow</a>
+<a href='#section-5'>5. Ledger Idempotency Flow</a>
+<a href='#section-6'>6. Release Gate State Machine</a>
+<a href='#section-7'>7. ISO 27001:2022 Implementation Roadmap</a>
+<a href='#section-8'>8. Fault Injection Test Flow</a>
+<a href='#section-9'>9. Supply Chain Security Pipeline</a>
+<a href='#section-10'>10. Multi-Standard Alignment</a>
+<a href='#section-11'>11. Wellfit Data Flow</a>
+<a href='#section-12'>12. Quality Gates (G0-G7)</a>
+<a href='#section-13'>13. PDCA Continuous Improvement Cycle</a>
+<a href='#section-14'>14. Risk Management Process</a>
+<a href='#section-15'>15. Wellfit Deployment Pipeline</a>
+</div>
+<h2 id='section-1'>1. System Architecture Overview</h2>
+<div class='diagram'><div class='mermaid'>
 graph TB
     subgraph "Wellfit Platform Architecture"
         subgraph "CLI Layer"
@@ -94,13 +93,9 @@ graph TB
     style MTRIX fill:#50c878,color:#fff
     style CORE fill:#ff8c00,color:#fff
     style SQLITE fill:#9370db,color:#fff
-</div>
-
----
-
-## 2. MTRIX Processing Pipeline
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-2'>2. MTRIX Processing Pipeline</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
     A[Drop Folder] --> B{Discover Files}
     B --> C[VR-01: File Name Check]
@@ -133,13 +128,9 @@ flowchart TD
     style N fill:#c8e6c9
     style Q fill:#d1c4e9
     style R fill:#b2dfdb
-</div>
-
----
-
-## 3. Access Control Flow (RBAC/ABAC)
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-3'>3. Access Control Flow (RBAC/ABAC)</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
     A[Access Request] --> B{User Exists?}
     B -->|No| C[Denied: User not found]
@@ -175,13 +166,9 @@ flowchart TD
     style O fill:#ffcdd2
     style Q fill:#d1c4e9
     style R fill:#b2dfdb
-</div>
-
----
-
-## 4. JIT Permission Workflow
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-4'>4. JIT Permission Workflow</h2>
+<div class='diagram'><div class='mermaid'>
 stateDiagram-v2
     [*] --> Pending: User requests JIT access
     Pending --> Approved: Approver approves
@@ -197,13 +184,9 @@ stateDiagram-v2
     Cancelled --> [*]
     Consumed --> [*]
     Revoked --> [*]
-</div>
-
----
-
-## 5. Ledger Idempotency Flow
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-5'>5. Ledger Idempotency Flow</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
     A[Process Drop] --> B[Compute Fingerprint]
     B --> C{Register Batch}
@@ -223,13 +206,9 @@ flowchart TD
     style D fill:#c8e6c9
     style K fill:#d1c4e9
     style L fill:#b2dfdb
-</div>
-
----
-
-## 6. Release Gate State Machine
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-6'>6. Release Gate State Machine</h2>
+<div class='diagram'><div class='mermaid'>
 stateDiagram-v2
     [*] --> DraftGenerated: Initialize
     DraftGenerated --> VerifiedPass: Payload valid
@@ -243,13 +222,9 @@ stateDiagram-v2
     DispatchUncertain --> VerifiedPass: Status check confirms not delivered
     Completed --> [*]
     Failed --> [*]
-</div>
-
----
-
-## 7. ISO 27001:2022 Implementation Roadmap
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-7'>7. ISO 27001:2022 Implementation Roadmap</h2>
+<div class='diagram'><div class='mermaid'>
 gantt
     title Wellfit ISO 27001:2022 Implementation Roadmap
     dateFormat  YYYY-MM-DD
@@ -267,13 +242,9 @@ gantt
     Third-Party Review       :b4, 2027-03-01, 14d
     Zero Trust Architecture  :b5, 2027-03-15, 14d
     Compliance Automation    :b6, 2027-03-29, 14d
-</div>
-
----
-
-## 8. Fault Injection Test Flow
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-8'>8. Fault Injection Test Flow</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
     A[Start Test] --> B[Create Ledger]
     B --> C[Inject SQLite Trigger]
@@ -293,13 +264,9 @@ flowchart TD
     style G fill:#c8e6c9
     style I fill:#c8e6c9
     style J fill:#b2dfdb
-</div>
-
----
-
-## 9. Supply Chain Security Pipeline
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-9'>9. Supply Chain Security Pipeline</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart LR
     A[Source Code] --> B[cargo build]
     B --> C[cargo clippy]
@@ -315,13 +282,9 @@ flowchart LR
     style F fill:#fff9c4
     style G fill:#d1c4e9
     style I fill:#c8e6c9
-</div>
-
----
-
-## 10. Multi-Standard Alignment
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-10'>10. Multi-Standard Alignment</h2>
+<div class='diagram'><div class='mermaid'>
 graph LR
     subgraph "ISO 27001:2022"
         A1[A.5.15 Access Control]
@@ -374,13 +337,9 @@ graph LR
     A6 --> B6
     A6 --> C6
     A6 --> D6
-</div>
-
----
-
-## 11. Wellfit Data Flow
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-11'>11. Wellfit Data Flow</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart LR
     subgraph "Input"
         A[MTRIX Files]
@@ -426,30 +385,26 @@ flowchart LR
     style K fill:#c8e6c9
     style L fill:#c8e6c9
     style M fill:#c8e6c9
-</div>
-
----
-
-## 12. Quality Gates (G0-G7)
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-12'>12. Quality Gates (G0-G7)</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
-    G0[G0: 撌乩??摰] -->|Pass| G1[G1: ?瘙??湔吞
-    G0 -->|Fail| STOP1[?迫嚗?撖急?雿
-    G1 -->|Pass| G2[G2: 撱箇蔭?釭]
-    G1 -->|Fail| STOP2[鋆??瘙?皜祈岫閮剛?]
-    G2 -->|Pass| G3[G3: 皜祈岫?釭]
-    G2 -->|Fail| STOP3[?餅??蔥?撣
-    G3 -->|Pass| G4[G4: 摰?釭]
-    G3 -->|Fail| STOP4[???臬?靽桀儔]
-    G4 -->|Pass| G5[G5: 鞈?摰?吞
-    G4 -->|Fail| STOP5[?餅??澆??迤撘◢?芣?
-    G5 -->|Pass| G6[G6: ?澆?摰]
-    G5 -->|Fail| STOP6[蝳迫?瑁?甇??鞈?霈]
-    G6 -->|Pass| G7[G7: 霅?摰?吞
-    G6 -->|Fail| STOP7[撱嗅??澆?]
-    G7 -->|Pass| DONE[??摰??摰?]
-    G7 -->|Fail| STOP8[銝?摰??摰摰?]
+    G0[G0: 工作區安全] -->|Pass| G1[G1: 需求完整性]
+    G0 -->|Fail| STOP1[停止：覆寫操作]
+    G1 -->|Pass| G2[G2: 建置品質]
+    G1 -->|Fail| STOP2[補齊需求與測試設計]
+    G2 -->|Pass| G3[G3: 測試品質]
+    G2 -->|Fail| STOP3[阻擋合併或發布]
+    G3 -->|Pass| G4[G4: 安全品質]
+    G3 -->|Fail| STOP4[重現、除錯及修復]
+    G4 -->|Pass| G5[G5: 資料完整性]
+    G4 -->|Fail| STOP5[阻擋發布或正式風險核准]
+    G5 -->|Pass| G6[G6: 發布安全]
+    G5 -->|Fail| STOP6[禁止執行正式資料變更]
+    G6 -->|Pass| G7[G7: 證據完整性]
+    G6 -->|Fail| STOP7[延後發布]
+    G7 -->|Pass| DONE[✅ 宣告完成]
+    G7 -->|Fail| STOP8[不得宣告完全完成]
 
     style G0 fill:#e3f2fd
     style G1 fill:#e3f2fd
@@ -468,30 +423,22 @@ flowchart TD
     style STOP6 fill:#ffcdd2
     style STOP7 fill:#ffcdd2
     style STOP8 fill:#ffcdd2
-</div>
-
----
-
-## 13. PDCA Continuous Improvement Cycle
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-13'>13. PDCA Continuous Improvement Cycle</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart LR
-    P[Plan\n摮?漲甈?撖拇\n撟游漲ISMS蝔賣\n撟游漲憸券?閰摯] --> D[Do\n?瑁?甈??隤?\n?瑁?ISO 27001蝔賣\nAI?啣虜銵?菜葫]
-    D --> C[Check\n?漲甈??勗?\n摮?漲甈??撠?閰摯\n撟游漲?批???扯?隡財
-    C --> A[Act\n?日憭?甈?\n?湔?輻??OP\n隤踵??閬?]
+    P[Plan\n季度權限審核\n年度ISMS稽核\n年度風險重新評估] --> D[Do\n執行權限重新認證\n執行ISO 27001稽核\nAI異常行為偵測]
+    D --> C[Check\n月度權限報告\n季度權限最小化評估\n年度控制項有效性評估]
+    C --> A[Act\n撤銷多餘權限\n更新政策與SOP\n調整監控規則]
     A --> P
 
     style P fill:#e3f2fd
     style D fill:#fff9c4
     style C fill:#d1c4e9
     style A fill:#c8e6c9
-</div>
-
----
-
-## 14. Risk Management Process
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-14'>14. Risk Management Process</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart TD
     A[Asset Identification] --> B[Threat Identification]
     B --> C[Vulnerability Identification]
@@ -514,13 +461,9 @@ flowchart TD
     style H fill:#fff9c4
     style I fill:#c8e6c9
     style M fill:#b2dfdb
-</div>
-
----
-
-## 15. Wellfit Deployment Pipeline
-
-<div class="mermaid">
+</div></div>
+<h2 id='section-15'>15. Wellfit Deployment Pipeline</h2>
+<div class='diagram'><div class='mermaid'>
 flowchart LR
     A[Source Code] --> B[cargo build]
     B --> C[cargo clippy]
@@ -536,51 +479,9 @@ flowchart LR
     style F fill:#fff9c4
     style G fill:#d1c4e9
     style I fill:#c8e6c9
-</div>
-
----
-
-## Document Index
-
-| Document | ID | Location |
-|----------|-----|----------|
-| KNB-MASTER.md | KNB-MASTER | `~/.local/share/kilo/plans/` |
-| KNB-ENG-SYSTEM.md | KNB-ENG-SYSTEM | `~/.local/share/kilo/plans/` |
-| KNB-PHASE2.md | KNB-PHASE2 | `~/.local/share/kilo/plans/` |
-| KNB-INDUSTRY-MASTER.md | KNB-INDUSTRY-MASTER | `~/.local/share/kilo/plans/` |
-| ADR-TEMPLATE.md | ADR-TEMPLATE | `Wellfit/plans/adr/` |
-| ADR-0001 | ADR-0001 | `Wellfit/plans/adr/` |
-| ADR-0002 | ADR-0002 | `Wellfit/plans/adr/` |
-| ADR-0003 | ADR-0003 | `Wellfit/plans/adr/` |
-| requirements-traceability.md | RTM-001 | `Wellfit/plans/` |
-| iam-evaluation.md | IAM-EVAL | `Wellfit/plans/` |
-| pam-evaluation.md | PAM-EVAL | `Wellfit/plans/` |
-| multi-standard-matrix.md | MULTI-STD | `Wellfit/plans/` |
-| industry-standards-implementation.md | INDUSTRY-IMPL | `Wellfit/plans/` |
-| phase2-deployment-runbook.md | PHASE2-DEPLOY | `Wellfit/plans/` |
-| keycloak-realm-export.json | KEYCLOAK | `Wellfit/plans/` |
-| vault-policy.hcl | VAULT | `Wellfit/plans/` |
-| wazuh-agent.conf | WAZUH-AGENT | `Wellfit/plans/` |
-| wazuh-rules.xml | WAZUH-RULES | `Wellfit/plans/` |
-| scripts/daily-backup.ps1 | BACKUP | `Wellfit/scripts/` |
-| scripts/restore.ps1 | RESTORE | `Wellfit/scripts/` |
-| deny.toml | DENY | `Wellfit/` |
-| .github/workflows/security.yml | SECURITY-CI | `Wellfit/.github/workflows/` |
-
----
-
-**?祆?隞嗥 Wellfit 蝟餌絞摰?嗆???蝔??????蝔?雿輻 Mermaid 隤?嚗??GitHub?itLab?S Code?bsidian 蝑??Mermaid ?極?瑚葉皜脫???*
-));
-const html = marked.parse(markdown);
-document.getElementById('content').innerHTML = html;
-document.querySelectorAll('code.language-mermaid').forEach(block => {
-  const div = document.createElement('div');
-  div.className = 'mermaid';
-  div.textContent = block.textContent;
-  block.parentNode.replaceWith(div);
-});
-mermaid.run();
+</div></div>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
 </script>
-<p class="no-print">如需列印為 PDF，請使用瀏覽器的「列印」功能（Ctrl+P），選擇「另存為 PDF」。</p>
 </body>
 </html>

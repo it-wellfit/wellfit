@@ -30,6 +30,7 @@ use ui::{
     Spinner, UiConfig,
 };
 
+use wellfit_bankpay::{query, BankEncoding, BankpayEngine};
 use wellfit_core::access_control::{
     AccessController, AccessDecision, Classification, Permission, PermissionLevel,
 };
@@ -42,7 +43,6 @@ use wellfit_mtrix::validators::VrRule;
 use wellfit_mtrix::MtrixEngine;
 use wellfit_reports::report_automator::ReportAutomator;
 use wellfit_shopee::shopee_engine::ShopeeInboundEngine;
-use wellfit_bankpay::{query, BankEncoding, BankpayEngine};
 
 const DEFAULT_LEDGER: &str = "data/wellfit_ledger.sqlite";
 const DEFAULT_MTRIX_FIXTURES: &str = "spec/fixtures/mtrix/delivered";
@@ -488,7 +488,10 @@ fn open_ledger_scoped(
 
 fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
     match &cli.command {
-        Commands::Status { db, export_knowledge } => run_status(ui, db, export_knowledge.as_deref()),
+        Commands::Status {
+            db,
+            export_knowledge,
+        } => run_status(ui, db, export_knowledge.as_deref()),
         Commands::Shopee {
             input,
             output,
@@ -920,7 +923,11 @@ fn run_mtrix(
                 file.rows_total,
                 file.rows_quarantined,
                 file.repairs_applied,
-                if file.rejected { "rejected" } else { "accepted" }
+                if file.rejected {
+                    "rejected"
+                } else {
+                    "accepted"
+                }
             );
             docs.push(serde_json::json!({
                 "doc_id": doc_id,
@@ -933,8 +940,15 @@ fn run_mtrix(
             }));
         }
         if !report.findings.is_empty() {
-            let findings_text: String = report.findings.iter()
-                .map(|f| format!("[{:?}] {} (line {}): {:?}", f.rule, f.reason, f.line, f.severity))
+            let findings_text: String = report
+                .findings
+                .iter()
+                .map(|f| {
+                    format!(
+                        "[{:?}] {} (line {}): {:?}",
+                        f.rule, f.reason, f.line, f.severity
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             docs.push(serde_json::json!({
@@ -947,9 +961,17 @@ fn run_mtrix(
                 "permissions": ["viewer", "editor"]
             }));
         }
-        let json = serde_json::to_string_pretty(&docs).map_err(|e| format!("export knowledge: {e}"))?;
+        let json =
+            serde_json::to_string_pretty(&docs).map_err(|e| format!("export knowledge: {e}"))?;
         fs::write(path, json).map_err(|e| format!("write export: {e}"))?;
-        info(ui, &format!("exported {} knowledge documents to {}", docs.len(), path.display()));
+        info(
+            ui,
+            &format!(
+                "exported {} knowledge documents to {}",
+                docs.len(),
+                path.display()
+            ),
+        );
     }
 
     Ok(0)
@@ -2062,18 +2084,15 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             } else {
                 batch_date.clone()
             };
-            let spin = Spinner::new("exporting payable vouchers to bank media file...", ui.color_enabled());
-            let result = engine.export_vouchers(
-                input,
-                batch,
-                &batch_date,
-                enc,
-                |_media| {
-                    // Production transport would send the media file to E.Sun
-                    // over TLS. Here we record success without network I/O.
-                    Ok(true)
-                },
+            let spin = Spinner::new(
+                "exporting payable vouchers to bank media file...",
+                ui.color_enabled(),
             );
+            let result = engine.export_vouchers(input, batch, &batch_date, enc, |_media| {
+                // Production transport would send the media file to E.Sun
+                // over TLS. Here we record success without network I/O.
+                Ok(true)
+            });
             spin.finish(Some("bank media file assembled"));
 
             match result {
@@ -2087,7 +2106,11 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
                     kv(ui, "dispatched", &r.dispatched.to_string());
                     kv(ui, "release state", &r.release_state);
                     ok(ui, "bankpay export complete");
-                    Ok(if r.vouchers_isolated > 0 || !r.dispatched { 2 } else { 0 })
+                    Ok(if r.vouchers_isolated > 0 || !r.dispatched {
+                        2
+                    } else {
+                        0
+                    })
                 }
                 Err(e) => Err(format!("bankpay export failed: {e}")),
             }
@@ -2132,10 +2155,26 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             heading(ui, "bankpay traceable query");
             kv(ui, "kind", &result.lookup_kind);
             kv(ui, "key", &result.lookup_key);
-            kv(ui, "batch", &result.batch_id.unwrap_or_else(|| "-".to_string()));
-            kv(ui, "bank ref", &result.bank_ref.unwrap_or_else(|| "-".to_string()));
-            kv(ui, "voucher", &result.voucher_no.unwrap_or_else(|| "-".to_string()));
-            kv(ui, "file sha256", &result.file_sha256.unwrap_or_else(|| "-".to_string()));
+            kv(
+                ui,
+                "batch",
+                &result.batch_id.unwrap_or_else(|| "-".to_string()),
+            );
+            kv(
+                ui,
+                "bank ref",
+                &result.bank_ref.unwrap_or_else(|| "-".to_string()),
+            );
+            kv(
+                ui,
+                "voucher",
+                &result.voucher_no.unwrap_or_else(|| "-".to_string()),
+            );
+            kv(
+                ui,
+                "file sha256",
+                &result.file_sha256.unwrap_or_else(|| "-".to_string()),
+            );
             for finding in &result.findings {
                 info(ui, finding);
             }

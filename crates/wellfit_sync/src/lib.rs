@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 #![allow(dead_code)]
 
 //! Wellfit Sync - Lightweight multi-platform sync daemon.
@@ -10,6 +10,11 @@ pub mod config;
 pub mod discovery;
 pub mod health;
 pub mod sync;
+
+pub use config::*;
+pub use discovery::*;
+pub use health::*;
+pub use sync::*;
 
 #[cfg(test)]
 mod config_tests;

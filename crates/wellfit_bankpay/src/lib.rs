@@ -12,7 +12,7 @@
 //! - Release gate (two-way door verify, one-way door dispatch).
 //! - Traceable query: voucher <-> bank reference <-> batch <-> file SHA-256.
 //!
-//! All amounts are carried as integer cents via [`crate::scaled::ScaledDecimal`].
+//! All amounts are carried as integer cents via `ScaledDecimal` (wellfit_core).
 //! Nothing is unsafe; every public API is documented.
 
 pub mod bankpay;

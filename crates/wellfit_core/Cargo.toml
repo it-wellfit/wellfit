@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name = "wellfit_core"
 version.workspace = true
 edition.workspace = true
@@ -13,3 +13,9 @@ serde_json.workspace = true
 chrono.workspace = true
 regex.workspace = true
 uuid.workspace = true
+toml.workspace = true
+
+[[bench]]
+name = "performance"
+harness = false
+
