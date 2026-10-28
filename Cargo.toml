@@ -33,3 +33,5 @@ regex = "1.10"
 uuid = { version = "1.8", features = ["v4"] }
 encoding_rs = "0.8"
 toml = "0.8"
+ureq = { version = "2.10", features = ["json"] }
+base64 = "0.22"

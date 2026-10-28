@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Validation pipeline for the MTRIX engine.
 //!
@@ -7,7 +7,7 @@
 //! changing the engine's orchestration logic.
 
 use crate::mtrix_engine::{MtrixEngine, ParsedFile};
-use crate::validators::{ValidationReport, ExceptionNotification};
+use crate::validators::{ExceptionNotification, ValidationReport};
 use std::path::PathBuf;
 
 /// Shared context passed through all pipeline stages.
@@ -146,7 +146,12 @@ impl PipelineStage for CrossFileStage {
     }
 
     fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
-        ctx.engine.apply_cross_file_rules(&ctx.parsed, &mut ctx.report, ctx.batch_id, &mut ctx.exceptions)?;
+        ctx.engine.apply_cross_file_rules(
+            &ctx.parsed,
+            &mut ctx.report,
+            ctx.batch_id,
+            &mut ctx.exceptions,
+        )?;
         Ok(())
     }
 }

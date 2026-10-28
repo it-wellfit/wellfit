@@ -20,6 +20,12 @@ parameters:
   batch_export: "BATCH-BANKPAY-{{ today | date('yyyyMMdd') }}"
   batch_import: "BATCH-BANKPAY-RES-{{ today | date('yyyyMMdd') }}"
   encoding: "utf8"
+  esun_url: "https://127.0.0.1:8443"
+  source_system: ""   # Provided by E.Sun Bank
+  customer_id: ""     # Enterprise group tax ID
+  payer_account: ""   # E.Sun payer account
+  payer_id: ""        # Payer tax ID
+  format_type: "2"    # 1=file (base64 media), 2=json
 
 steps:
   - id: export-vouchers
@@ -31,6 +37,12 @@ steps:
       - --Input=${input_vouchers}
       - --Batch=${batch_export}
       - --Encoding=${encoding}
+      - --EsunUrl=${esun_url}
+      - --SourceSystem=${source_system}
+      - --CustomerId=${customer_id}
+      - --PayerAccount=${payer_account}
+      - --PayerId=${payer_id}
+      - --FormatType=${format_type}
     on_error: alert
 
   - id: import-results

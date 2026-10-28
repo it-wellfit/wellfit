@@ -44,6 +44,31 @@ param(
     [ValidateSet("utf8", "cp950", "big5")]
     [string]$Encoding = "utf8",
 
+    /// E.Sun security component base URL
+    [Parameter(Mandatory = $false)]
+    [string]$EsunUrl = "https://127.0.0.1:8443",
+
+    /// SourceSystemId agreed with E.Sun
+    [Parameter(Mandatory = $false)]
+    [string]$SourceSystem,
+
+    /// Enterprise group tax ID (8-10 digits)
+    [Parameter(Mandatory = $false)]
+    [string]$CustomerId,
+
+    /// Payer E.Sun account number
+    [Parameter(Mandatory = $false)]
+    [string]$PayerAccount,
+
+    /// Payer tax ID
+    [Parameter(Mandatory = $false)]
+    [string]$PayerId,
+
+    /// Format type: 1=file (base64 media), 2=json
+    [Parameter(Mandatory = $false)]
+    [ValidateSet("1", "2")]
+    [string]$FormatType = "2",
+
     /// If set, fail the script when isolated records > 0
     [switch]$Strict
 )
@@ -61,8 +86,15 @@ $args = @(
     "--batch", $Batch,
     "--batch-date", $BatchDate,
     "--encoding", $Encoding,
+    "--esun-url", $EsunUrl,
+    "--format-type", $FormatType,
     "--db", $Db
 )
+
+if ($SourceSystem) { $args += @("--source-system", $SourceSystem) }
+if ($CustomerId) { $args += @("--customer-id", $CustomerId) }
+if ($PayerAccount) { $args += @("--payer-account", $PayerAccount) }
+if ($PayerId) { $args += @("--payer-id", $PayerId) }
 
 Write-Host "Exporting payable vouchers to bank media file..."
 Write-Host "  binary : $WellfitBin"

@@ -15,12 +15,18 @@
 //! All amounts are carried as integer cents via `ScaledDecimal` (wellfit_core).
 //! Nothing is unsafe; every public API is documented.
 
+pub mod api;
 pub mod bankpay;
 pub mod encoding;
+pub mod http;
+pub mod media;
 pub mod query;
 pub mod release;
 
+pub use api::*;
 pub use bankpay::*;
 pub use encoding::*;
+pub use http::*;
+pub use media::*;
 pub use query::*;
 pub use release::*;

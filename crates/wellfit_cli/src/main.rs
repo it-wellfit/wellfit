@@ -356,6 +356,24 @@ enum BankpayAction {
         /// Target encoding: utf8, cp950, big5 (default utf8)
         #[arg(long, default_value = "utf8", value_parser = ["utf8", "cp950", "big5"])]
         encoding: String,
+        /// E.Sun security component base URL (e.g. https://127.0.0.1:8443)
+        #[arg(long, default_value = "https://127.0.0.1:8443")]
+        esun_url: String,
+        /// SourceSystemId agreed with E.Sun
+        #[arg(long)]
+        source_system: Option<String>,
+        /// Enterprise group tax ID (8-10 digits)
+        #[arg(long)]
+        customer_id: Option<String>,
+        /// Payer E.Sun account number
+        #[arg(long)]
+        payer_account: Option<String>,
+        /// Payer tax ID
+        #[arg(long)]
+        payer_id: Option<String>,
+        /// Format type: 1=file (base64 media), 2=json
+        #[arg(long, default_value = "2", value_parser = ["1", "2"])]
+        format_type: String,
         /// Ledger database path
         #[arg(long, default_value = DEFAULT_LEDGER)]
         db: PathBuf,
@@ -2067,6 +2085,12 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             batch,
             batch_date,
             encoding,
+            esun_url: _esun_url,
+            source_system: _source_system,
+            customer_id: _customer_id,
+            payer_account: _payer_account,
+            payer_id: _payer_id,
+            format_type: _format_type,
             db,
         } => {
             let ledger = open_ledger(ui, db)?;

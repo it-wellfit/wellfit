@@ -9,7 +9,9 @@
 //! itself; the caller supplies a transport function so the same engine works
 //! in unit tests and in production.
 
+use crate::api::{self, TwdPaymentRequest, TwdPaymentRequestData, TwdPaymentTx};
 use crate::encoding::{from_utf8, to_utf8, BankEncoding};
+use crate::http::EsunHttpClient;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -272,21 +274,198 @@ pub fn media_file_sha256(bytes: &[u8]) -> String {
 // Engine
 // ---------------------------------------------------------------------------
 
-/// The BankPay engine. Holds the ledger and release gate.
+/// The BankPay engine. Holds the ledger, release gate, and optional HTTP client.
 pub struct BankpayEngine {
     pub ledger: Arc<IdempotencyLedger>,
     pub gate: Arc<Mutex<ReleaseGate>>,
+    pub http_client: Option<EsunHttpClient>,
 }
 
 impl BankpayEngine {
     /// Open a production-scoped engine (exclusive batch claims).
     pub fn new(ledger: Arc<IdempotencyLedger>, gate: Arc<Mutex<ReleaseGate>>) -> Self {
-        Self { ledger, gate }
+        Self {
+            ledger,
+            gate,
+            http_client: None,
+        }
     }
 
     /// Open an engine with per-run claims (used by verification / audit).
     pub fn new_scoped(ledger: Arc<IdempotencyLedger>, gate: Arc<Mutex<ReleaseGate>>) -> Self {
-        Self { ledger, gate }
+        Self {
+            ledger,
+            gate,
+            http_client: None,
+        }
+    }
+
+    /// Attach an HTTP client for API-based operations.
+    pub fn with_http_client(mut self, client: EsunHttpClient) -> Self {
+        self.http_client = Some(client);
+        self
+    }
+
+    /// Query TWD transaction status via the E.Sun API.
+    ///
+    /// Returns the bank reference and status code for a given payment number
+    /// and transaction sequence. Used for DispatchUncertain reconciliation.
+    pub fn query_twd_status(
+        &self,
+        source_system: &str,
+        payment_no: &str,
+        tx_seq: &str,
+    ) -> Result<api::TwdStatusResponseData, String> {
+        let client = self
+            .http_client
+            .as_ref()
+            .ok_or_else(|| "HTTP client not configured".to_string())?;
+        let request = api::TwdStatusQueryRequest {
+            rq_header: api::RqHeader {
+                msg_id: format!(
+                    "{}{}{:07}",
+                    payment_no.chars().take(10).collect::<String>(),
+                    chrono::Utc::now().format("%Y%m%d"),
+                    1
+                ),
+                request_time: chrono::Utc::now().format("%Y/%m/%d %H:%M:%S").to_string(),
+                customer_ixd: payment_no.chars().take(10).collect(),
+                source_system: source_system.to_string(),
+            },
+            rq_data: api::TwdStatusQueryRequestData {
+                payment_no: payment_no.to_string(),
+                tx_seq: tx_seq.to_string(),
+            },
+        };
+        let response = client.retrieve_twd_status(source_system, &request)?;
+        if response.is_success() {
+            Ok(response.rs_data.unwrap_or_default())
+        } else {
+            Err(format!(
+                "TWD status query failed: {} {}",
+                response.rs_status.code, response.rs_status.message
+            ))
+        }
+    }
+
+    /// Convert a Voucher to a TwdPaymentTx for the E.Sun API.
+    pub fn voucher_to_twd_tx(
+        voucher: &Voucher,
+        payer_account: &str,
+        payer_id: &str,
+    ) -> TwdPaymentTx {
+        TwdPaymentTx {
+            payer_account_no: payer_account.to_string(),
+            payer_id: payer_id.to_string(),
+            payee_bank_id: "000".to_string(), // placeholder - from ERP vendor data
+            payee_branch_id: "0000".to_string(),
+            payee_account_no: voucher.bank_account.clone(),
+            payee_name: voucher.vendor_code.clone(),
+            payee_id: String::new(),
+            tx_date: if voucher.due_date.is_empty() {
+                chrono::Utc::now().format("%Y%m%d").to_string()
+            } else {
+                voucher.due_date.replace("-", "")
+            },
+            tx_amt: (voucher.amount_cents as f64 / 100.0).to_string(), // cents -> yuan
+            charge_fee_type: "0".to_string(),
+            memo: voucher.reference.clone(),
+            notify_method: "1".to_string(),
+            notify_email: String::new(),
+            notify_fax: String::new(),
+            write_off_no: voucher.voucher_no.clone(),
+            remark: String::new(),
+            tx_seq: format!(
+                "IOB{}{}",
+                chrono::Utc::now().format("%Y%m%d"),
+                voucher.voucher_no
+            ),
+            detail_list: vec![],
+        }
+    }
+
+    /// Build a TwdPaymentRequest from a list of vouchers.
+    pub fn build_twd_payment_request(
+        &self,
+        vouchers: &[Voucher],
+        rq_header: api::RqHeader,
+        payer_account: &str,
+        payer_id: &str,
+        format_type: &str,
+    ) -> TwdPaymentRequest {
+        let tx_list: Vec<TwdPaymentTx> = vouchers
+            .iter()
+            .map(|v| Self::voucher_to_twd_tx(v, payer_account, payer_id))
+            .collect();
+
+        // For format_type=2 (JSON), content is base64-encoded JSON
+        let content = if format_type == "2" {
+            let json = serde_json::to_string(&tx_list).unwrap_or_default();
+            crate::media::base64_encode_media(json.as_bytes())
+        } else {
+            // format_type=1: assemble 422-char media file, base64-encode
+            let media_records: Vec<crate::media::TwdMediaRecord> = vouchers
+                .iter()
+                .map(|v| crate::media::TwdMediaRecord {
+                    payer_account_no: payer_account.to_string(),
+                    payer_id: payer_id.to_string(),
+                    payee_bank_id: "000".to_string(),
+                    payee_branch_id: "0000".to_string(),
+                    payee_account_no: v.bank_account.clone(),
+                    payee_name: v.vendor_code.clone(),
+                    payee_id: String::new(),
+                    tx_date: if v.due_date.is_empty() {
+                        chrono::Utc::now().format("%Y%m%d").to_string()
+                    } else {
+                        v.due_date.replace("-", "")
+                    },
+                    tx_amt: (v.amount_cents as f64 / 100.0).to_string(),
+                    charge_fee_type: "0".to_string(),
+                    memo: v.reference.clone(),
+                    notify_method: "1".to_string(),
+                    notify_email: String::new(),
+                    notify_fax: String::new(),
+                    write_off_no: v.voucher_no.clone(),
+                    remark: String::new(),
+                    tx_seq: format!("IOB{}{}", chrono::Utc::now().format("%Y%m%d"), v.voucher_no),
+                })
+                .collect();
+            match crate::media::assemble_twd_media_file(&media_records) {
+                Ok(bytes) => crate::media::base64_encode_media(&bytes),
+                Err(_) => String::new(),
+            }
+        };
+
+        TwdPaymentRequest {
+            rq_header,
+            rq_data: TwdPaymentRequestData {
+                format_type: format_type.to_string(),
+                payment_type: "1".to_string(),
+                verification_type: "1".to_string(),
+                flow_info: api::FlowInfo::default(),
+                content,
+            },
+        }
+    }
+
+    /// Check if an API result code indicates success.
+    pub fn is_api_success(code: &str) -> bool {
+        api::is_api_success(code)
+    }
+
+    /// Check if a transaction status indicates success.
+    pub fn is_tx_success(status: &str) -> bool {
+        api::is_tx_success(status)
+    }
+
+    /// Check if a transaction status indicates pending.
+    pub fn is_tx_pending(status: &str) -> bool {
+        api::is_tx_pending(status)
+    }
+
+    /// Check if a transaction status indicates failure.
+    pub fn is_tx_failed(status: &str) -> bool {
+        api::is_tx_failed(status)
     }
 
     /// Export vouchers to a bank media file and dispatch via the release gate.

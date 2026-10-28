@@ -51,13 +51,13 @@ pub struct RuleEngine {
 impl RuleEngine {
     /// Create a new rule engine from TOML files.
     pub fn from_files(vr_path: &Path, anom_path: &Path) -> Result<Self, String> {
-        let vr_content = fs::read_to_string(vr_path)
-            .map_err(|e| format!("cannot read VR rules: {e}"))?;
-        let vr_set: VrRuleSet = toml::from_str(&vr_content)
-            .map_err(|e| format!("cannot parse VR rules TOML: {e}"))?;
+        let vr_content =
+            fs::read_to_string(vr_path).map_err(|e| format!("cannot read VR rules: {e}"))?;
+        let vr_set: VrRuleSet =
+            toml::from_str(&vr_content).map_err(|e| format!("cannot parse VR rules TOML: {e}"))?;
 
-        let anom_content = fs::read_to_string(anom_path)
-            .map_err(|e| format!("cannot read ANOM rules: {e}"))?;
+        let anom_content =
+            fs::read_to_string(anom_path).map_err(|e| format!("cannot read ANOM rules: {e}"))?;
         let anom_set: AnomRuleSet = toml::from_str(&anom_content)
             .map_err(|e| format!("cannot parse ANOM rules TOML: {e}"))?;
 
@@ -98,17 +98,23 @@ impl RuleEngine {
     }
 
     /// Validate that all expected rules are present.
-    pub fn validate_completeness(&self, expected_vr: usize, expected_anom: usize) -> Result<(), String> {
+    pub fn validate_completeness(
+        &self,
+        expected_vr: usize,
+        expected_anom: usize,
+    ) -> Result<(), String> {
         if self.vr_rules.len() != expected_vr {
             return Err(format!(
                 "expected {} VR rules, found {}",
-                expected_vr, self.vr_rules.len()
+                expected_vr,
+                self.vr_rules.len()
             ));
         }
         if self.anom_rules.len() != expected_anom {
             return Err(format!(
                 "expected {} ANOM rules, found {}",
-                expected_anom, self.anom_rules.len()
+                expected_anom,
+                self.anom_rules.len()
             ));
         }
         Ok(())
