@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! Wellfit CLI - single native entry point for the three product waves.
 //!
@@ -2085,7 +2085,7 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             batch,
             batch_date,
             encoding,
-            esun_url: _esun_url,
+            esun_url,
             source_system: _source_system,
             customer_id: _customer_id,
             payer_account: _payer_account,
@@ -2096,6 +2096,12 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             let ledger = open_ledger(ui, db)?;
             let gate = Arc::new(Mutex::new(ReleaseGate::default()));
             let mut engine = BankpayEngine::new(ledger, gate);
+            let http_config = wellfit_bankpay::EsunHttpClientConfig {
+                base_url: esun_url.clone(),
+                ..Default::default()
+            };
+            let http_client = wellfit_bankpay::EsunHttpClient::new(http_config);
+            engine = engine.with_http_client(http_client);
             let enc = match encoding.as_str() {
                 "cp950" => BankEncoding::Cp950,
                 "big5" => BankEncoding::Big5,

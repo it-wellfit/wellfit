@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+﻿#![forbid(unsafe_code)]
 
 //! BankPay engine: export (ERP -> bank) and import (bank -> ERP) pipelines
 //! for accounts payable vouchers.
@@ -271,6 +271,20 @@ pub fn media_file_sha256(bytes: &[u8]) -> String {
 }
 
 // ---------------------------------------------------------------------------
+
+/// Format an amount in cents as a yuan string with exactly 2 decimal places.
+/// Uses integer arithmetic to avoid floating-point precision loss.
+pub fn cents_to_yuan_str(cents: i64) -> String {
+    let negative = cents < 0;
+    let abs_cents = cents.unsigned_abs();
+    let yuan = abs_cents / 100;
+    let remainder = abs_cents % 100;
+    if negative {
+        format!("-{}.{:02}", yuan, remainder)
+    } else {
+        format!("{}.{:02}", yuan, remainder)
+    }
+}
 // Engine
 // ---------------------------------------------------------------------------
 
@@ -367,7 +381,7 @@ impl BankpayEngine {
             } else {
                 voucher.due_date.replace("-", "")
             },
-            tx_amt: (voucher.amount_cents as f64 / 100.0).to_string(), // cents -> yuan
+            tx_amt: cents_to_yuan_str(voucher.amount_cents), // cents -> yuan
             charge_fee_type: "0".to_string(),
             memo: voucher.reference.clone(),
             notify_method: "1".to_string(),
@@ -419,7 +433,7 @@ impl BankpayEngine {
                     } else {
                         v.due_date.replace("-", "")
                     },
-                    tx_amt: (v.amount_cents as f64 / 100.0).to_string(),
+                    tx_amt: cents_to_yuan_str(v.amount_cents),
                     charge_fee_type: "0".to_string(),
                     memo: v.reference.clone(),
                     notify_method: "1".to_string(),
