@@ -70,44 +70,50 @@ pub struct DeviceList {
     pub devices: Vec<PeerDevice>,
 }
 
-pub fn load_config(path: &Path) -> SyncConfig {
-    if path.exists() {
-        if let Ok(text) = fs::read_to_string(path) {
-            if let Ok(config) = serde_json::from_str(&text) {
-                return config;
-            }
+pub fn load_config(path: &Path) -> Result<SyncConfig, String> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(SyncConfig::default());
         }
-    }
-    SyncConfig::default()
+        Err(error) => {
+            return Err(format!("cannot read config {}: {error}", path.display()));
+        }
+    };
+    serde_json::from_str(&text)
+        .map_err(|error| format!("cannot parse config {}: {error}", path.display()))
 }
 
-pub fn save_config(path: &Path, config: &SyncConfig) {
-    if let Ok(text) = serde_json::to_string_pretty(config) {
-        let _ = fs::write(path, text);
-    }
+pub fn save_config(path: &Path, config: &SyncConfig) -> Result<(), String> {
+    let text = serde_json::to_string_pretty(config)
+        .map_err(|error| format!("cannot serialize config {}: {error}", path.display()))?;
+    wellfit_core::text::write_atomic(path, text.as_bytes())
+        .map_err(|error| format!("cannot write config {}: {error}", path.display()))
 }
 
-pub fn add_device(path: &Path, name: &str, address: &str, port: u16) {
-    let mut device_list = load_device_list(path);
+pub fn add_device(path: &Path, name: &str, address: &str, port: u16) -> Result<(), String> {
+    let mut device_list = load_device_list(path)?;
     device_list.devices.push(PeerDevice {
         name: name.to_string(),
         address: address.to_string(),
         port,
         enabled: true,
     });
-    save_device_list(path, &device_list);
+    save_device_list(path, &device_list)?;
     println!("Device '{}' added: {}:{}", name, address, port);
+    Ok(())
 }
 
-pub fn remove_device(path: &Path, name: &str) {
-    let mut device_list = load_device_list(path);
+pub fn remove_device(path: &Path, name: &str) -> Result<(), String> {
+    let mut device_list = load_device_list(path)?;
     device_list.devices.retain(|d| d.name != name);
-    save_device_list(path, &device_list);
+    save_device_list(path, &device_list)?;
     println!("Device '{}' removed", name);
+    Ok(())
 }
 
-pub fn list_devices(path: &Path) {
-    let device_list = load_device_list(path);
+pub fn list_devices(path: &Path) -> Result<(), String> {
+    let device_list = load_device_list(path)?;
     println!("Configured devices:");
     for d in &device_list.devices {
         println!(
@@ -115,23 +121,43 @@ pub fn list_devices(path: &Path) {
             d.name, d.address, d.port, d.enabled
         );
     }
+    Ok(())
 }
 
-pub fn load_device_list(path: &Path) -> DeviceList {
+pub fn load_device_list(path: &Path) -> Result<DeviceList, String> {
     let devices_path = path.with_extension("devices.json");
-    if devices_path.exists() {
-        if let Ok(text) = fs::read_to_string(&devices_path) {
-            if let Ok(list) = serde_json::from_str(&text) {
-                return list;
-            }
+    let text = match fs::read_to_string(&devices_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DeviceList::default());
         }
-    }
-    DeviceList::default()
+        Err(error) => {
+            return Err(format!(
+                "cannot read device list {}: {error}",
+                devices_path.display()
+            ));
+        }
+    };
+    serde_json::from_str(&text).map_err(|error| {
+        format!(
+            "cannot parse device list {}: {error}",
+            devices_path.display()
+        )
+    })
 }
 
-fn save_device_list(path: &Path, list: &DeviceList) {
+fn save_device_list(path: &Path, list: &DeviceList) -> Result<(), String> {
     let devices_path = path.with_extension("devices.json");
-    if let Ok(text) = serde_json::to_string_pretty(list) {
-        let _ = fs::write(&devices_path, text);
-    }
+    let text = serde_json::to_string_pretty(list).map_err(|error| {
+        format!(
+            "cannot serialize device list {}: {error}",
+            devices_path.display()
+        )
+    })?;
+    wellfit_core::text::write_atomic(&devices_path, text.as_bytes()).map_err(|error| {
+        format!(
+            "cannot write device list {}: {error}",
+            devices_path.display()
+        )
+    })
 }

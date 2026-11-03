@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Wellfit MTRIX - Validation Rule Engine (VR-01 .. VR-12)
 //!
@@ -295,7 +295,6 @@ pub struct Deviation {
     pub canonical_name: String,
     /// Open issue in the MTRIX issue register.
     pub issue_id: String,
-
 }
 
 /// Per-rule counters.
@@ -640,7 +639,6 @@ pub fn check_code(value: &str, allowed: &[&str]) -> CodeCheck {
         CodeCheck::NotAllowed
     }
 }
-
 
 /// Exception notification for cross-file referential findings (VR-08, VR-09).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

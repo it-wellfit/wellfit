@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Integration tests for the Wellfit CLI and the MTRIX pipeline.
 //!

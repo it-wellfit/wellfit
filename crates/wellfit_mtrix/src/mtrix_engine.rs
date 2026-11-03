@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Wellfit MTRIX - Specification-Driven Repair and Validation Engine.
 //!
@@ -259,6 +259,7 @@ impl MtrixEngine {
         report.spec_conformance = spec_conformance();
 
         let mut parsed: Vec<ParsedFile> = Vec::new();
+        let mut repaired_outputs = Vec::new();
 
         for item in discovered {
             let file_spec = spec::spec_by_role(item.role);
@@ -295,7 +296,7 @@ impl MtrixEngine {
                         key: item.file_name.clone(),
                         reason: warning.clone(),
                     },
-                );
+                )?;
             }
             if !outcome.filename_ok {
                 outcome.rejected = true;
@@ -319,7 +320,7 @@ impl MtrixEngine {
                         key: item.file_name.clone(),
                         reason: outcome.reject_reason.clone(),
                     },
-                );
+                )?;
                 report.files.push(outcome);
                 continue;
             }
@@ -351,7 +352,7 @@ impl MtrixEngine {
                             key: file_spec.prefix.to_string(),
                             reason: difference.clone(),
                         },
-                    );
+                    )?;
                 }
                 report.files.push(outcome);
                 continue;
@@ -389,7 +390,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason,
                         },
-                    );
+                    )?;
                 }
 
                 // Every rule is evaluated, not just the first one that fails: the
@@ -397,15 +398,17 @@ impl MtrixEngine {
                 // why the row was rejected, otherwise the sender has to resubmit
                 // the file several times to discover the remaining problems.
                 for (rule, key, reason) in self.format_warnings(file_spec, &values) {
-                    let _ = self.ledger.log_finding(LedgerFinding {
-                        batch_id,
-                        rule_code: rule.id(),
-                        severity: ledger_severity(Severity::Warning),
-                        filename: file_spec.prefix,
-                        line_number: line_no,
-                        key_value: &key,
-                        reason: &reason,
-                    });
+                    self.ledger
+                        .log_finding(LedgerFinding {
+                            batch_id,
+                            rule_code: rule.id(),
+                            severity: ledger_severity(Severity::Warning),
+                            filename: file_spec.prefix,
+                            line_number: line_no,
+                            key_value: &key,
+                            reason: &reason,
+                        })
+                        .map_err(|e| format!("Database error recording MTRIX finding: {e}"))?;
                     report.add_finding(Finding {
                         rule,
                         severity: Severity::Warning,
@@ -427,7 +430,7 @@ impl MtrixEngine {
 
             // VR-05: aggregate duplicate sales transactions (repair, not rejection).
             rows =
-                self.aggregate_duplicates(file_spec, rows, &mut row_lines, &mut report, batch_id);
+                self.aggregate_duplicates(file_spec, rows, &mut row_lines, &mut report, batch_id)?;
 
             outcome.repairs_applied = row_log.count();
             outcome.rows_accepted = rows.len();
@@ -435,15 +438,17 @@ impl MtrixEngine {
 
             for (line_no, values, violations) in &isolated {
                 for (rule, key, reason) in violations {
-                    let _ = self.ledger.log_quarantine_with_severity(LedgerFinding {
-                        batch_id,
-                        rule_code: rule.id(),
-                        severity: ledger_severity(Severity::Error),
-                        filename: file_spec.prefix,
-                        line_number: *line_no,
-                        key_value: &values.join(";"),
-                        reason,
-                    });
+                    self.ledger
+                        .log_quarantine_with_severity(LedgerFinding {
+                            batch_id,
+                            rule_code: rule.id(),
+                            severity: ledger_severity(Severity::Error),
+                            filename: file_spec.prefix,
+                            line_number: *line_no,
+                            key_value: &values.join(";"),
+                            reason,
+                        })
+                        .map_err(|e| format!("Database error recording MTRIX quarantine: {e}"))?;
                     report.add_finding(Finding {
                         rule: *rule,
                         severity: Severity::Error,
@@ -457,15 +462,17 @@ impl MtrixEngine {
             }
 
             for repair in row_log.applied() {
-                let _ = self.ledger.log_finding(LedgerFinding {
-                    batch_id,
-                    rule_code: &repair.rule_id,
-                    severity: ledger_severity(Severity::Info),
-                    filename: &repair.file,
-                    line_number: repair.line,
-                    key_value: &repair.column,
-                    reason: &format!("{} -> {}", repair.before, repair.after),
-                });
+                self.ledger
+                    .log_finding(LedgerFinding {
+                        batch_id,
+                        rule_code: &repair.rule_id,
+                        severity: ledger_severity(Severity::Info),
+                        filename: &repair.file,
+                        line_number: repair.line,
+                        key_value: &repair.column,
+                        reason: &format!("{} -> {}", repair.before, repair.after),
+                    })
+                    .map_err(|e| format!("Database error recording MTRIX repair: {e}"))?;
             }
 
             self.apply_counts(file_spec.role, row_log.count());
@@ -486,8 +493,6 @@ impl MtrixEngine {
             }
 
             if let Some(dir) = output_dir {
-                fs::create_dir_all(dir)
-                    .map_err(|e| format!("cannot create output folder {}: {e}", dir.display()))?;
                 let out_name = repaired_file_name(&item.file_name);
                 let out_path = dir.join(out_name);
                 let mut body = canonical_header.join(";");
@@ -495,8 +500,7 @@ impl MtrixEngine {
                     body.push('\n');
                     body.push_str(&row.join(";"));
                 }
-                fs::write(&out_path, format!("{body}\n"))
-                    .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
+                repaired_outputs.push((out_path, format!("{body}\n")));
             }
 
             report.files.push(outcome);
@@ -516,7 +520,7 @@ impl MtrixEngine {
             batch_id,
             output_dir,
             parsed,
-            repaired_outputs: Vec::new(),
+            repaired_outputs,
             report,
             errors: Vec::new(),
         };
@@ -524,7 +528,10 @@ impl MtrixEngine {
         // Release the batch claim for defective drops (isolated rows).
         let had_isolated_rows = ctx.report.files.iter().any(|f| f.rows_quarantined > 0);
         if had_isolated_rows {
-            let _ = ctx.engine.ledger.release_file_batch(batch_id);
+            ctx.engine
+                .ledger
+                .release_file_batch(batch_id)
+                .map_err(|e| format!("Database error releasing MTRIX batch: {e}"))?;
         }
 
         let pipeline = default_pipeline();
@@ -688,9 +695,9 @@ impl MtrixEngine {
         row_lines: &mut Vec<usize>,
         report: &mut ValidationReport,
         batch_id: &str,
-    ) -> Vec<Vec<String>> {
+    ) -> Result<Vec<Vec<String>>, String> {
         if file_spec.role != FileRole::Sales {
-            return rows;
+            return Ok(rows);
         }
         let doc_idx = file_spec.index_of("DOCUMENT_NUMBER");
         let batch_idx = file_spec.index_of("BATCH_CODE");
@@ -698,7 +705,7 @@ impl MtrixEngine {
         let cust_idx = file_spec.index_of_role(KeyRole::Customer);
         let type_idx = file_spec.index_of("DOCUMENT_TYPE");
         let (Some(doc_idx), Some(batch_idx), Some(qty_idx)) = (doc_idx, batch_idx, qty_idx) else {
-            return rows;
+            return Ok(rows);
         };
 
         let mut grouped: Vec<(String, Vec<String>)> = Vec::new();
@@ -727,13 +734,16 @@ impl MtrixEngine {
                 Some(&pos) => {
                     let previous = grouped[pos].1[qty_idx].clone();
                     let current = row.get(qty_idx).cloned().unwrap_or_default();
-                    let sum = ScaledDecimal::parse(&previous)
-                        .ok()
-                        .zip(ScaledDecimal::parse(&current).ok())
-                        .and_then(|(a, b)| a.checked_add(&b))
-                        .map(|v| v.to_plain_string())
-                        .unwrap_or_else(|| previous.clone());
-                    grouped[pos].1[qty_idx] = sum;
+                    let previous_value = ScaledDecimal::parse(&previous).map_err(|e| {
+                        format!("invalid quantity while aggregating MTRIX key {key}: {e}")
+                    })?;
+                    let current_value = ScaledDecimal::parse(&current).map_err(|e| {
+                        format!("invalid quantity while aggregating MTRIX key {key}: {e}")
+                    })?;
+                    let sum = previous_value.checked_add(&current_value).ok_or_else(|| {
+                        format!("quantity overflow while aggregating MTRIX key {key}")
+                    })?;
+                    grouped[pos].1[qty_idx] = sum.to_plain_string();
                     merged_keys.push(key);
                 }
                 None => {
@@ -763,11 +773,11 @@ impl MtrixEngine {
                     key: key.clone(),
                     reason: "duplicate sales transaction aggregated into a single row (VR-05, error level)".to_string(),
                 },
-            );
+            )?;
         }
         row_lines.clear();
         row_lines.extend(grouped_lines);
-        grouped.into_iter().map(|(_, row)| row).collect()
+        Ok(grouped.into_iter().map(|(_, row)| row).collect())
     }
 
     /// VR-08 .. VR-11: cross-file referential integrity.
@@ -776,7 +786,7 @@ impl MtrixEngine {
         parsed: &[ParsedFile],
         report: &mut ValidationReport,
         batch_id: &str,
-    ) {
+    ) -> Result<(), String> {
         let customers: Option<HashSet<String>> = parsed
             .iter()
             .find(|f| f.role == FileRole::Customer && !f.rejected)
@@ -904,7 +914,7 @@ impl MtrixEngine {
                                 key: customer,
                                 reason: &reason,
                             },
-                        );
+                        )?;
                     }
                     None => {
                         self.record_not_evaluable(
@@ -914,7 +924,7 @@ impl MtrixEngine {
                             sales,
                             line_no,
                             customer,
-                        );
+                        )?;
                     }
                     _ => {}
                 }
@@ -938,7 +948,7 @@ impl MtrixEngine {
                                     key: batch,
                                     reason: &reason,
                                 },
-                            );
+                            )?;
                         }
                     }
                     _ => {
@@ -949,7 +959,7 @@ impl MtrixEngine {
                             sales,
                             line_no,
                             batch,
-                        );
+                        )?;
                     }
                 }
 
@@ -967,7 +977,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason: "SALESPERSON_CODE is empty; mandatory-ness is undefined by the manual (MTRIX-003)".to_string(),
                         },
-                    );
+                    )?;
                 } else {
                     match &sales_force {
                         Some(pairs) => {
@@ -991,7 +1001,7 @@ impl MtrixEngine {
                                         key: salesperson,
                                         reason: &reason,
                                     },
-                                );
+                                )?;
                             }
                         }
                         None => {
@@ -1002,7 +1012,7 @@ impl MtrixEngine {
                                 sales,
                                 line_no,
                                 salesperson,
-                            );
+                            )?;
                         }
                     }
                 }
@@ -1021,7 +1031,7 @@ impl MtrixEngine {
                             key: String::new(),
                             reason: "DOCUMENT_TYPE is empty; the row is kept because the manual does not define the mandatory-ness of the field (MTRIX-003)".to_string(),
                         },
-                    );
+                    )?;
                 }
             }
         }
@@ -1057,7 +1067,7 @@ impl MtrixEngine {
                                 key: batch,
                                 reason: &reason,
                             },
-                        );
+                        )?;
                     }
                     None => {
                         self.record_not_evaluable(
@@ -1067,7 +1077,7 @@ impl MtrixEngine {
                             inventory,
                             line_no,
                             batch,
-                        );
+                        )?;
                     }
                     _ => {}
                 }
@@ -1108,7 +1118,7 @@ impl MtrixEngine {
                                 key: customer,
                                 reason: &reason,
                             },
-                        );
+                        )?;
                     }
                     None => {
                         self.record_not_evaluable(
@@ -1118,7 +1128,7 @@ impl MtrixEngine {
                             sales_force,
                             line_no,
                             customer,
-                        );
+                        )?;
                     }
                     _ => {}
                 }
@@ -1174,10 +1184,11 @@ impl MtrixEngine {
                             key: inv_date,
                             reason,
                         },
-                    );
+                    )?;
                 }
             }
         }
+        Ok(())
     }
 
     /// Record a finding in the report and in the ledger at the same time.
@@ -1187,17 +1198,25 @@ impl MtrixEngine {
     /// back later, so both are written together. A row that was isolated is
     /// written to the quarantine log instead, so that the two counts of the
     /// `status` command do not count the same problem twice.
-    fn record_finding(&self, report: &mut ValidationReport, batch_id: &str, finding: Finding) {
-        let _ = self.ledger.log_finding(LedgerFinding {
-            batch_id,
-            rule_code: finding.rule.id(),
-            severity: ledger_severity(finding.severity),
-            filename: &finding.file,
-            line_number: finding.line,
-            key_value: &finding.key,
-            reason: &finding.reason,
-        });
+    fn record_finding(
+        &self,
+        report: &mut ValidationReport,
+        batch_id: &str,
+        finding: Finding,
+    ) -> Result<(), String> {
+        self.ledger
+            .log_finding(LedgerFinding {
+                batch_id,
+                rule_code: finding.rule.id(),
+                severity: ledger_severity(finding.severity),
+                filename: &finding.file,
+                line_number: finding.line,
+                key_value: &finding.key,
+                reason: &finding.reason,
+            })
+            .map_err(|e| format!("Database error recording MTRIX finding: {e}"))?;
         report.add_finding(finding);
+        Ok(())
     }
 
     fn record_referential(
@@ -1205,7 +1224,7 @@ impl MtrixEngine {
         report: &mut ValidationReport,
         batch_id: &str,
         finding: ReferentialFinding<'_>,
-    ) {
+    ) -> Result<(), String> {
         self.record_finding(
             report,
             batch_id,
@@ -1218,7 +1237,7 @@ impl MtrixEngine {
                 key: finding.key.to_string(),
                 reason: finding.reason.to_string(),
             },
-        );
+        )
     }
 
     fn record_not_evaluable(
@@ -1229,7 +1248,7 @@ impl MtrixEngine {
         file: &ParsedFile,
         line_no: usize,
         key: &str,
-    ) {
+    ) -> Result<(), String> {
         self.record_finding(
             report,
             batch_id,
@@ -1243,7 +1262,7 @@ impl MtrixEngine {
                 reason: "a required file was rejected, so this rule could not be evaluated"
                     .to_string(),
             },
-        );
+        )
     }
 
     /// VR-12 preparation: amounts grouped by country. Currencies are never

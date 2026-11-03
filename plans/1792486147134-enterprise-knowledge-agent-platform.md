@@ -3,7 +3,7 @@
 > Plan ID: `1792486147134-enterprise-knowledge-agent-platform`
 > Scope: Integrate Wellfit (data pipeline) + ekpi-platform (knowledge/RAG/governance) + SyncMesh (sync) into a unified, top-tier enterprise knowledge & action platform
 > Method: Master Prompt lifecycle (G0→G10), evidence-driven, local-first
-> Status: Plan only — no source edits in this pass
+> Status: Unapproved architecture proposal — not execution-ready (reviewed 2026-11-02). Cross-project ownership, interfaces, security/data boundaries, and delivery acceptance are not approved; its inventory and Wellfit test/version claims are historical and unverified. Do not treat this plan as authorization to couple the projects.
 
 ## 1. Objective
 

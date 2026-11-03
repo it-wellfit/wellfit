@@ -1,8 +1,10 @@
 ﻿# Wellfit CLI 命令參考
 
-> 文件編號：WFLT-DOC-CLI-001｜狀態：Draft｜版本：v1.0｜日期：2026-10-20
+> 文件編號：WFLT-DOC-CLI-001｜狀態：Draft｜版本：v1.3｜日期：2026-11-02
 > 撰寫：Wellfit 知識庫維護者｜審閱：未審閱｜核准：未核准
-> 變更摘要：v1.0。依 `wellfit --help` 與各子命令 `--help` 之**實際輸出**重寫；新增 `spec` 子命令；
+> 變更摘要：v1.3。補記一百萬筆復測的效能變異，並更新 MTRIX／BankPay 復核量測次數。
+> v1.1 記錄 Shopee／Reports 標準 CSV 引號解析、欄內換行、重複欄名與格式錯誤行為，並揭露目前的記憶體／檔案大小限制。
+> v1.0 依 `wellfit --help` 與各子命令 `--help` 之**實際輸出**重寫；新增 `spec` 子命令；
 > 修正 `--input data/fuyi_inventory.csv` 與 `--dir data` 兩個錯誤範例。
 > 驗證標記：✔ 已對原始文件逐字查證｜△ 依標準條文或通行做法推導｜未驗證 本次無法確認
 
@@ -21,12 +23,25 @@ Commands:
   mtrix    Wave 3 - Alpargatas MTRIX five file drop
   audit    Full physical audit over the real files in the data folder
   spec     Print the MTRIX contract and rule catalogue
+  access-control  Evaluate access-control policies
+  jit      Manage just-in-time permission requests
+  bankpay  E.Sun Bank payment integration
   help     Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
 ```
+
+The `bankpay`, `access-control`, and `jit` command groups are also available; use
+`wellfit.exe <COMMAND> --help` for their current arguments. `wellfit_sync.exe` is
+a separate binary. Its current sync cycle only discovers peers; when a peer is
+available it exits with an explicit "data transfer is not implemented" error
+and does not claim that records were synchronized. Generated CSV, JSON,
+BankPay media, Sync configuration, and repaired MTRIX files are staged beside
+their destinations and published by rename after the complete file has been
+flushed; each destination is atomic individually, not as a multi-file
+transaction.
 
 **執行檔位置**：`%LOCALAPPDATA%\Temp\wellfit-target\debug\wellfit.exe`
 （由 `build.ps1` 建置，target 在儲存庫之外——本機應用程式控制原則會阻擋桌面路徑下的產物）。
@@ -86,6 +101,7 @@ wave 1 shopee: 2 order(s) accepted, 0 record(s) isolated
   `Shopee column contract violation: Shopee inbound order export: required column(s) missing: <COL> (header: ...)`
 - 金額守恆（EX-06）不符 → 該列隔離（`ERR_SUM_MISMATCH_EX06`）。
 - 金額／數量格式錯誤 → 該列隔離（`ERR_MONEY_FORMAT`／`ERR_QTY_FORMAT`），**不當成 0**。
+- 使用 RFC 4180 相容解析：以雙引號包住含逗號／換行的欄位，並以 `""` 表示欄位內的雙引號；重複欄名或不完整／不合法引號會在帳本登記前拒收整份輸入。
 
 > `data/shopee_orders.csv` 為**合成示範資料**，非蝦皮實際匯出檔。
 
@@ -114,6 +130,44 @@ wave 2 reports: 4 record(s) accepted, 0 record(s) isolated
   （`ITEM_NO`、`ITEM_NAME`、`WAREHOUSE_CODE`、`BEGIN_INV`、`IN_QTY`、`OUT_QTY`、`ADJ_QTY`、`END_INV`）。
 - 庫存恆等式不符 → 該列隔離（`ERR_INV_BALANCE_MISMATCH`）。
 - 數量不可解析 → 該列隔離（`ERR_INV_NUMBER_FORMAT`），**不當成 0**。
+- 使用 RFC 4180 相容解析：含逗號、雙引號或換行的品名需正確引用；重複欄名或不合法引號會在帳本登記前拒收整份輸入。
+
+> **容量限制（目前實作）**：輸入檔有 100 MiB 單檔上限，且以最多上限加一個 byte 的有界讀取辨識超限檔案；BankPay 匯出與匯入也在讀取階段套用此上限。這不等於常數記憶體：Shopee 需保留訂單彙總，Reports API／CLI 仍收集有效與隔離結果，BankPay 仍保留輸入、憑證及媒體檔資料。CSV 逐記錄解析不代表整體流程已具常數記憶體。Shopee 與 Reports 的百萬筆合成量測是各一次；峰值記憶體、重複執行、併發、背壓與故障恢復尚未完成驗收；不得將量測描述為生產容量保證或百萬筆 SLA。詳見 [`SYNTHETIC_CAPACITY_BASELINE.md`](SYNTHETIC_CAPACITY_BASELINE.md)。
+
+### 本機合成容量量測
+
+先依 `AGENTS.md` 的核准入口建置 CLI，再執行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/benchmark_synthetic_ingestion.ps1 `
+  -RecordsPerPipeline 200000
+```
+
+此腳本只生成合成 Shopee／Reports 資料，預設存放於 `%TEMP%` 唯一目錄，輸出筆數、耗時、CPU、採樣工作集、輸入雜湊及 SQLite 大小／雜湊。`-OutputDirectory` 可指定 repository 外的空白目錄，`-WellfitExe` 可指定其他建置輸出。MTRIX／BankPay 的 contract-derived mock benchmark 另由 [`benchmark_synthetic_test.ps1`](../scripts/benchmark_synthetic_test.ps1) 執行；它採核准 build.ps1 建置測試，再收集 engine 結果、程序 CPU 與 peak working set。Sync 無傳輸實作，兩個腳本均不測量 Sync。Shopee／Reports 的 100 ms 工作集採樣可能漏掉短暫峰值；MTRIX／BankPay runner 同時讀取 Windows process peak working set 並以 50 ms 間隔抽樣，記錄值包含測試啟動／資料產生，不等於純引擎記憶體需求。所有合成結果均不等於生產 SLA。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/benchmark_synthetic_test.ps1 `
+  -Pipeline MTRIX -Records 50000
+powershell -ExecutionPolicy Bypass -File scripts/benchmark_synthetic_test.ps1 `
+  -Pipeline BankPay -Records 250000
+```
+
+#### 已量測的合成基線（2026-11-02）
+
+在 Windows、16 個邏輯處理器、約 15.4 GiB 可見實體記憶體的本機，依序執行每條管線一次。兩條管線各自接受全部有效列、隔離 0 列；結果可由上述腳本重跑。此為合成輸入的單次工程觀測，不是生產流量預測、SLA 或信賴區間。最新百萬筆資料與雜湊見容量基線文件；它明確區分此次量測及更早的工程觀測。
+
+| 管線 | 輸入筆數 | 輸入大小 | 耗時 | 吞吐 | CPU 時間 | 採樣峰值工作集 |
+|---|---:|---:|---:|---:|---:|---:|
+| Shopee | 250,000 | 20,000,084 B | 37.858 s | 6,603.58 records/s | 33.141 s | 316 MiB |
+| Shopee, before batched ledger locks | 500,000 | 40,000,084 B | 81.305 s | 6,149.67 records/s | 63.406 s | 620 MiB |
+| Shopee, after batched ledger locks (run 1) | 500,000 | 40,000,084 B | 20.576 s | 24,299.62 records/s | 20.281 s | 609 MiB |
+| Shopee, after batched ledger locks (run 2) | 500,000 | 40,000,084 B | 19.871 s | 25,162.13 records/s | 19.578 s | 593 MiB |
+| Reports | 250,000 | 19,000,074 B | 1.528 s | 163,648.15 records/s | 1.453 s | 89 MiB |
+| Reports, run 1 | 500,000 | 38,000,074 B | 2.714 s | 184,225.11 records/s | 2.672 s | 179 MiB |
+| Reports, run 2 | 500,000 | 38,000,074 B | 4.163 s | 120,110.02 records/s | 4.141 s | 170 MiB |
+| Reports, run 3 | 500,000 | 38,000,074 B | 4.250 s | 117,633.64 records/s | 4.156 s | 169 MiB |
+
+「after」執行改為在單一 SQLite transaction 中批次取得 Shopee 訂單冪等鎖，兩次 500,000 列觀測約為原單次觀測的 4 倍吞吐；這只是同一主機的前後工程比較，不能視為普遍效能保證。借用鍵避免另建大型冪等鍵複本後，Shopee／Reports 百萬筆初次復測各為 43.386／8.326 秒；由目前工作樹重建 CLI 後的另一次單次復測為 60.888／12.188 秒。輸入雜湊相同但耗時不同，顯示目前單次測量不能作穩定容量承諾；完整指標與雜湊見 [`SYNTHETIC_CAPACITY_BASELINE.md`](SYNTHETIC_CAPACITY_BASELINE.md)。工作集於啟動時及每 100 ms 採樣，可能低估短暫峰值；Shopee 仍將整批輸入、訂單聚合及輸出保留於記憶體，尚未解決有界記憶體或故障恢復問題。CLI 單檔輸入上限仍為 100 MiB。上述 Shopee／Reports 數據不包含 MTRIX、BankPay 或 Sync 的混合執行，因此不代表四流程混合量測或每日百萬筆驗收。
 
 > **更正**：舊版文件寫的是 `--input data/fuyi_inventory.csv`，該檔不存在。
 > 正確檔名為 `data/fuyi_inventory_report.csv`。
@@ -234,4 +288,3 @@ Options:
 | 退出碼 | 0 = 執行完成；非 0 = 錯誤或（`--strict` 時）驗證失敗 |
 
 | **報告與帳本計數差異** | `audit_report.json` 與 `wellfit status` 的計數可能不同：`audit_report.json` 的 `errors`/`violations` 為**單次審計**的筆數；`wellfit status` 的 `isolated records` 為**帳本累計**的所有歷次審計隔離項目總數。兩者皆正確，語義不同：前者為本次審計結果，後者為帳本歷史總計。 |
-

@@ -1,5 +1,7 @@
 # Wellfit Phase 2 完整執行計畫 — 從治理基礎到產業標準導入
 
+> **Disposition (2026-11-02): Historical proposal — not execution-ready.** Its Phase 1/2 status and references overlap with `KNB-MASTER.md`, `KNB-ISO-MASTER.md`, and `KNB-PHASE2.md`; these masters currently have unresolved authority. Do not execute this combined roadmap until scope and one source of truth are approved.
+
 > 文件編號：1792635153907-phase2-complete-execution
 > 適用範圍：Wellfit MTRIX Rust 代碼庫 + 企業級 ISMS + 電商/百貨/財會/製造業
 > 前置文件：KNB-MASTER.md (v3.0)、KNB-ENG-SYSTEM.md

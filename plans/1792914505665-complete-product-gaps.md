@@ -1,5 +1,7 @@
 # Plan: Complete Remaining Product Gaps (Stubs → Real Implementations)
 
+> **Disposition (2026-11-02): Historical proposal, not an approved current roadmap.** This EKPI-scoped plan is stored under `Wellfit/plans/`; its test-binary and stub status is an old snapshot. Reconcile only in `ekpi-platform/` against [its charter](../../ekpi-platform/PROJECT_CHARTER.md) and current test evidence.
+
 ## Current state (verified)
 
 - Engine (`platform/src/engine.rs`): real rule-based adjudication, no longer heuristic. Clippy clean, fmt clean, compiles.

@@ -1,6 +1,6 @@
 # Wellfit Phase 2 導入計畫 — 重點項目、切入點與最佳調整方案
 
-> 文件編號：KNB-PHASE2｜狀態：Active｜版本：v1.0｜日期：2026-10-25
+> 文件編號：KNB-PHASE2｜狀態：Blocked — 與 KNB-MASTER／KNB-ISO-MASTER 的執行權威未裁定｜版本：v1.0｜日期：2026-10-25
 > 前置文件：KNB-MASTER.md（v3.0）、KNB-ISO-001 ~ 010、KNB-WELL-006、KNB-WELL-009、KNB-INDUSTRY-MASTER
 > 本輪模式：Plan Mode（唯讀盤點、分析、提出方案；不修改程式碼）
 

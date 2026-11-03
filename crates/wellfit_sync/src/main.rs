@@ -21,7 +21,7 @@ const VERSION: &str = "0.1.0";
 #[command(name = "wellfit_sync", version = VERSION, about = "Lightweight multi-platform sync daemon")]
 struct Cli {
     /// Configuration file path
-    #[arg(short, long, default_value = "sync.toml")]
+    #[arg(short, long, default_value = "sync.json")]
     config: PathBuf,
 
     /// Run as daemon (background service)
@@ -80,23 +80,26 @@ fn main() {
 
     match cli.command {
         Some(Commands::Status { db }) => {
-            sync::show_status(&db);
+            exit_on_error(sync::show_status(&db));
         }
         Some(Commands::AddDevice {
             name,
             address,
             port,
         }) => {
-            config::add_device(&cli.config, &name, &address, port);
+            exit_on_error(config::add_device(&cli.config, &name, &address, port));
         }
         Some(Commands::RemoveDevice { name }) => {
-            config::remove_device(&cli.config, &name);
+            exit_on_error(config::remove_device(&cli.config, &name));
         }
         Some(Commands::ListDevices) => {
-            config::list_devices(&cli.config);
+            exit_on_error(config::list_devices(&cli.config));
         }
         Some(Commands::Sync { device }) => {
-            sync::run_sync_cycle(&cli.config, &device);
+            if let Err(error) = sync::run_sync_cycle(&cli.config, &device) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
         }
         Some(Commands::Health) => {
             health::run_health_check();
@@ -109,12 +112,19 @@ fn main() {
         }
         None => {
             if cli.daemon {
-                sync::run_daemon(&cli.config);
+                exit_on_error(sync::run_daemon(&cli.config));
             } else {
                 println!("wellfit_sync v{}", VERSION);
                 println!("Use --help for available commands");
             }
         }
+    }
+}
+
+fn exit_on_error(result: Result<(), String>) {
+    if let Err(error) = result {
+        eprintln!("{error}");
+        std::process::exit(1);
     }
 }
 

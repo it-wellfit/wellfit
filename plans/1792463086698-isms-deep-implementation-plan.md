@@ -1,7 +1,8 @@
 # ISMS 深度實施最佳化方案 — 完整可執行計畫
 
 > 計畫編號：KNB-CMP-PLAN-002｜版本：v2.0｜日期：2026-10-24
-> 本計畫為實作準備級文件，供實作代理直接執行；不預填 Q1–Q5 未決事實。
+> 狀態：Blocked — 與其他 ISMS 主計畫的權威範圍未裁定（2026-11-02）；不得直接執行。
+> 本計畫原標示為實作準備級；其治理假設與驗收結果須先對照 `../KNB-MASTER.md`、`../KNB-ISO-MASTER.md` 及 `../PLAN.md`。
 > 所有變更後必須重跑 `verify-compliance.ps1`，結果須為 PASS>0 / WARN=0 / FAIL=0。
 
 ---
@@ -992,4 +993,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "Knowledge/tools/compliance/
 
 ---
 
-*本計畫為實作準備級文件。所有變更後必須重跑 `verify-compliance.ps1`，結果須為 PASS>0 / WARN=0 / FAIL=0。*
+*本文件為受阻的歷史提案。不得將固定 PASS/WARN/FAIL 數量當作通用驗收門檻；若重新核准，需先依來源與範圍重新定義驗收。*

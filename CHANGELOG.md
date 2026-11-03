@@ -6,6 +6,18 @@
 > 對應之知識庫版本：`2026/Knowledge` v1.0（2026-10-20）。
 > **所有數字皆可追溯**，追溯對照見 [`../Knowledge/traceability/claims-vs-evidence.md`](../../Knowledge/traceability/claims-vs-evidence.md)。
 
+## [Unreleased]
+
+### Changed
+
+- Shopee bulk idempotency locking now borrows order keys instead of allocating a second million-entry `(String, amount)` request vector; SQLite locking remains in one transaction.
+- Shopee and Reports CSV ingestion uses record-aware parsing with strict malformed-quote rejection, duplicate normalized-header rejection, and CSV-safe quarantine/output serialization.
+
+### Added
+
+- A repeatable synthetic Shopee/Reports capacity runner and measured one-million-record baseline with hashes, resource observations, and explicit non-SLA limitations.
+- Kilo Gateway 429 diagnostic guidance distinguishing documented anonymous limits from unknown authenticated/provider quotas and prohibiting disclosure of credentials or sensitive prompts.
+
 ## [1.0.0] — 2026-10-20
 
 ### 規格驅動之 MTRIX 介接引擎

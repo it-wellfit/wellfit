@@ -1,4 +1,7 @@
 # Encoding & Data Format Modernization Plan
+
+> **Disposition (2026-11-02): Historical proposal; baseline partly implemented and partly unverified.** The root `.editorconfig`, project `.gitattributes`, and `scripts/encoding-tools.ps1` now exist, so the adjacent UTF-8 plan's “missing” inventory is stale. The advanced secure-envelope and format-expansion proposals below are not approved requirements. See [`../PLAN.md`](../PLAN.md); validate the current configuration separately before claiming the standard is enforced.
+
 Goal: 讓工作區內所有檔案與資料交換，能在「文字編碼（UTF-8 繁簡體無亂碼）」與「二進位資料交換（緊湊、可壓縮、可加密、可驗證）」之間無缺損轉換，並支援先進格式（Base91/Z85/basE91、CBOR、Parquet/Arrow、聯合加密壓縮）。
 
 ## 現狀（已完成）

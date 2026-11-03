@@ -13,8 +13,8 @@
 
 ## 1. 專案概況
 
-- 大前實業（Dachen Industrial）輔翼 ERP 與三大商業產品自動化引擎，**5-crate Rust 工作區**。
-- 單一原生二進位發行檔：`wellfit.exe`（`wellfit_cli`），無前端、無 JavaScript、無外部 DLL 依賴。
+- 大前實業（Dachen Industrial）輔翼 ERP 與商業資料整合工具，**7-crate Rust 工作區**。
+- 工作區包含 `wellfit.exe`（`wellfit_cli`）與獨立的 `wellfit_sync.exe`；Sync 的資料傳輸目前尚未實作。無前端、無 JavaScript。
 - 契約事實的唯一來源是跨專案知識庫 `2026/Knowledge/`，**不是**網路、**不是**既有文件的敘述。
 
 ## 2. Crate 地圖
@@ -25,7 +25,9 @@
 | `wellfit_shopee` | `crates/wellfit_shopee` | 蝦皮進貨訂單 → 輔翼 ERP 匯入批次 | `shopee_order_contract()`（8 欄）、`ShopeeInboundEngine`、`ShopeeOrder::verify_line_sum`（EX-06） |
 | `wellfit_reports` | `crates/wellfit_reports` | 輔翼 ERP 庫存報表解析與發布閘門 | `fuyi_inventory_report_contract()`（8 欄）、`ReportAutomator` |
 | `wellfit_mtrix` | `crates/wellfit_mtrix` | MTRIX 五檔契約、驗證與修復 | `MTRIX_SPEC`（56 欄，`src/spec.rs`）、`VrRule`（15，`src/validators.rs`）、`REPAIR_RULES`（12，`src/repairs.rs`）、`MtrixEngine`（`src/mtrix_engine.rs`） |
-| `wellfit_cli` | `crates/wellfit_cli` | `wellfit.exe` 進入點 | 六個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec` |
+| `wellfit_bankpay` | `crates/wellfit_bankpay` | E.Sun 銀行付款媒體與 API 整合 | BankPay 匯出／匯入、HTTP client、付款查詢 |
+| `wellfit_sync` | `crates/wellfit_sync` | 裝置探索、同步狀態與 daemon 骨架；資料傳輸尚未實作 | 設定、探索、健康檢查、SQLite 同步狀態 |
+| `wellfit_cli` | `crates/wellfit_cli` | `wellfit.exe` 進入點 | 九個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec`／`access-control`／`jit`／`bankpay` |
 
 ## 3. 建置入口（**必須**使用此入口）
 
@@ -146,6 +148,7 @@ $wf = "$env:LOCALAPPDATA\Temp\wellfit-target\debug\wellfit.exe"
 | `data/` | 示範輸入與執行產出 | 示範輸入為**合成資料**；產出可被覆寫 |
 | `docs/` | 專案文件 | 對外文件與知識庫保持一致 |
 | `target/`、`*.sqlite`、`*.lock`、`*.exe` | 建置產物 | 已在 `.gitignore` 忽略，不得提交 |
+| `artifacts/<session-id>/` | Session 產物 | 對話／測試／執行／匯入匯出檔案；遵循 `scripts/session-start.ps1` 建立，重產物已忽略 |
 
 ## 8. 提交與變更紀錄
 

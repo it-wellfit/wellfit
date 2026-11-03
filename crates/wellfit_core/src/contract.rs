@@ -12,7 +12,7 @@
 //! and made any "strict column validation" claim untrue. A contract has no
 //! positional fallback by construction.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// The columns a file must carry, and where they live.
 #[derive(Debug, Clone, Default)]
@@ -63,6 +63,25 @@ impl ColumnContract {
     /// insensitive and ignores surrounding whitespace.
     pub fn resolve(&self, headers: &[&str]) -> Result<ColumnMap, String> {
         let normalised: Vec<String> = headers.iter().map(|h| h.trim().to_uppercase()).collect();
+        let mut seen = HashSet::with_capacity(normalised.len());
+        let duplicates: Vec<&str> = headers
+            .iter()
+            .zip(normalised.iter())
+            .filter_map(|(original, normalized)| {
+                if seen.insert(normalized) {
+                    None
+                } else {
+                    Some(*original)
+                }
+            })
+            .collect();
+        if !duplicates.is_empty() {
+            return Err(format!(
+                "{}: duplicate column name(s): {}",
+                self.name,
+                duplicates.join(", ")
+            ));
+        }
 
         let mut indices = HashMap::new();
         let mut missing: Vec<&str> = Vec::new();
@@ -202,5 +221,22 @@ mod tests {
             ])
             .unwrap();
         assert_eq!(map.index("ITEM_NO").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_rejects_duplicate_headers_after_normalization() {
+        let error = report()
+            .resolve(&[
+                "ITEM_NO",
+                "item_no",
+                "WAREHOUSE_CODE",
+                "BEGIN_INV",
+                "IN_QTY",
+                "OUT_QTY",
+                "ADJ_QTY",
+                "END_INV",
+            ])
+            .unwrap_err();
+        assert!(error.contains("duplicate column"), "{error}");
     }
 }

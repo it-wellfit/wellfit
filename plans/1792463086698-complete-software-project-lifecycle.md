@@ -1,8 +1,8 @@
 # Wellfit 企業級軟體專案生命週期計畫
 
 > 計畫編號：KNB-WELL-LIFE-001｜版本：v1.0｜日期：2026-10-25
-> 狀態：實作準備級｜驗證標記：✔ 已對原始程式碼與文件逐字查證
-> 適用範圍：Wellfit Rust 工作區 (6 crates) + ISMS 合規套件 + MTRIX 介接 + 多平台同步守護程式
+> 狀態：Historical proposal — not execution-ready (reviewed 2026-11-02)
+> 適用範圍：原始草案記載 6 crates；現有 manifest 已列 7 crates。其程式碼／測試基線與相鄰 lifecycle plans 有重疊，請先讀 `../PLAN.md`。
 
 ---
 
@@ -313,4 +313,4 @@ wellfit_sync status
 
 ## 10. 結語
 
-本計畫文件為實作準備級文件，所有變更必須重新驗證並更新本計畫。
+本文件為歷史提案，不是目前執行授權。若經核准重新採用，須先依 `../PLAN.md` 對齊範圍與現況，再重驗所有原始驗收條件。

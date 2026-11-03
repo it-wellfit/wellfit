@@ -1,5 +1,7 @@
 # Unified Integration Architecture Plan
 
+> **Disposition (2026-11-02): Proposal only; not an approved cross-project architecture.** The listed Kafka/PostgreSQL/Redis/Kubernetes choices and “confirmed” scope are not evidenced by current project contracts. Reconcile independently with each project owner before implementation; do not treat historical test counts or crate lists below as current.
+
 Plan path: `C:\Users\stephanie.huang\.local\share\kilo\plans\1792461065184-unified-integration-architecture.md`
 
 ## Decisions (confirmed with user)

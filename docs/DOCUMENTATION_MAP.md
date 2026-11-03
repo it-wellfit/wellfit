@@ -10,7 +10,7 @@
 
 ## 1. 文件體系總覽
 
-本文件地圖列出所有與 BankPay 整合相關的文件，說明每份文件的目的、主要讀者、內容範圍，以及與其他文件的關聯。文件分為 **BankPay 領域文件**（已存在，`docs/bankpay/`）與 **橫向工程文件**（新增，`docs/`）。
+本文件地圖列出 BankPay 相關文件與主要工程文件的閱讀入口，不代表各文件均已核准或內容一致。2026-11-02 已直接核對本機 E.Sun V2.8 原始技術 PDF：銀行安控元件 API 是整合邊界；`formatType=2` 為 JSON，`formatType=1` 為規格限定的一借一貸檔案載荷。故 API-first 為文件證據支持的協定決策，不採 file-drop 主流程。`docs/bankpay/` 是維護中的決策／介面文件組；`docs/esun-bank-flaps-erp-integration/` 是重複且含過期完成宣稱的次要摘要，不得作為實作授權。沙箱、正式帳戶及端對端銀行驗收仍為 **Blocked**。
 
 ### 1.1 文件領域分類
 
@@ -31,11 +31,13 @@
 | 資料模型 | `docs/` | 1 | DATA_MODEL |
 | 環境與建置 | `docs/` | 1 | ENVIRONMENT_BUILD_DEPLOY |
 | 測試與品質 | `docs/` | 1 | TESTING_QUALITY |
+| 合成容量與 AI 服務診斷 | `docs/` | 2 | 四流程合成工程容量基線；Kilo 429 診斷與資料安全界線 |
 | 維護與擴充 | `docs/` | 1 | MAINTENANCE_EVOLUTION |
 | 追溯矩陣 | `docs/` | 1 | TRACEABILITY_MATRIX |
 | 品質審查報告 | `docs/` | 1 | QUALITY_REVIEW_REPORT |
+| E.Sun 次要摘要（歷史） | `docs/esun-bank-flaps-erp-integration/` | 4 | 與 `docs/bankpay/` 重疊；內容有 file-first 與已完成宣稱，保留追溯但不得作為權威契約或驗收證據 |
 
-**總計**：20 份文件（8 份領域 + 12 份橫向）
+**範圍說明：**上表是 BankPay 核心閱讀路徑，不是 `docs/` 的完整檔案清冊。2026-11-02 本機盤點共有 39 份 Markdown 文件（含子目錄）；新增或移除文件時以實際目錄重查，不以本段數字作為永久不變量。
 
 ---
 
@@ -107,6 +109,8 @@ API 介面契約
 | 17 | `docs/bankpay/06-test-and-acceptance.md` | 測試策略、測試案例、驗收 | QA、開發 | 8, 13, 14 |
 | 18 | `docs/bankpay/07-deployment-and-operations.md` | 部署、網路、運營手冊 | 維運、SRE | 7, 16 |
 | 19 | `docs/bankpay/08-open-questions-and-decisions.md` | 未決議題、ADR、風險 | 架構、產品 | 10, 11 |
+| 20 | `docs/SYNTHETIC_CAPACITY_BASELINE.md` | 四流程合成工程量測、輸入指紋、資源限制與後續驗收門檻 | 開發、QA、維運 | 8, 21 |
+| 21 | `docs/KILO_429_DIAGNOSTICS.md` | Kilo 429 官方來源、診斷步驟與 Wellfit 隔離界線 | 開發、資安、維運 | 5, 20 |
 
 ---
 
@@ -120,6 +124,8 @@ API 介面契約
 | 欄位 X 的長度與格式是什麼？ | `04-interface-specification.md` §2 | `CODE_REFERENCE.md` §5 |
 | 部署需要什麼憑證與埠號？ | `07-deployment-and-operations.md` | `05-security-and-audit.md` |
 | 測試覆蓋率與品質關卡？ | `TESTING_QUALITY.md` | `06-test-and-acceptance.md` |
+| 四流程的合成容量結果與限制？ | `SYNTHETIC_CAPACITY_BASELINE.md` | `CLI.md`「本機合成容量量測」 |
+| Kilo 429 如何診斷且避免資料外洩？ | `KILO_429_DIAGNOSTICS.md` | Kilo 官方文件 |
 | 修改某個欄位會影響什麼？ | `MAINTENANCE_EVOLUTION.md` | `TRACEABILITY_MATRIX.md` |
 | API 呼叫失敗如何診斷？ | `05-security-and-audit.md` §4 | `07-deployment-and-operations.md` §5 |
 | 未決議題與風險？ | `08-open-questions-and-decisions.md` | `QUALITY_REVIEW_REPORT.md` |
@@ -128,7 +134,7 @@ API 介面契約
 
 ## 6. 文件一致性規則
 
-1. **單一可信來源**：同一項規格（欄位長度、API 端點、結果代碼）以 `04-interface-specification.md` 為主要定義位置，其他文件以連結引用，不得複製。
+1. **介接模式與證據邊界**：本機 E.Sun V2.8 PDF 支持安控元件 API、JSON (`formatType=2`) 與限定的一借一貸檔案載荷 (`formatType=1`)。以原始 PDF 為銀行規格來源，以 `docs/bankpay/08-open-questions-and-decisions.md` 記錄本專案決策；舊 file-first 計畫與 `docs/esun-bank-flaps-erp-integration/` 摘要已不具權威性。API 協定選擇不等於沙箱、正式帳戶或端對端驗收通過。
 2. **名稱統一**：程式碼中的類別名、函式名、欄位名必須與文件中完全一致。例如 `EsunHttpClientConfig`、`build_twd_payment_request`、`TwdMediaRecord`。
 3. **證據標記**：每個技術陳述必須標記證據等級（✔ 已確認 / △ 合理推論 / ● 設計建議 / ⚠ 待確認 / 🚫 已知限制）。
 4. **版本同步**：文件版本號必須與程式碼變更同步。當 `Cargo.toml` 版本變更時，相關文件需審查。

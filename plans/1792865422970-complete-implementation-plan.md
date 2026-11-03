@@ -1,5 +1,7 @@
 # EKPI Platform — Complete Implementation Plan (Phases 2–10 + Deliveries E–G)
 
+> **Disposition (2026-11-02): Historical proposal, not an approved current roadmap.** This EKPI-scoped plan is stored under `Wellfit/plans/`; its 2026-10-25 test/status claims conflict with other snapshots and have not been revalidated. Reconcile only in `ekpi-platform/` against [its charter](../../ekpi-platform/PROJECT_CHARTER.md) and current test evidence.
+
 ## Goal
 
 Deliver the full Evidence-Grounded Enterprise Knowledge & Process Intelligence Platform per the Master Prompt (v1 + Addendum v2), closing every remaining gap from Round 2/3 MVP to a production-grade, auditable, local-first system that exceeds comparable market software.

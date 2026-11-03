@@ -144,12 +144,8 @@ impl PipelineStage for CrossFileStage {
     }
 
     fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
-        ctx.engine.apply_cross_file_rules(
-            &ctx.parsed,
-            &mut ctx.report,
-            ctx.batch_id,
-        );
-        Ok(())
+        ctx.engine
+            .apply_cross_file_rules(&ctx.parsed, &mut ctx.report, ctx.batch_id)
     }
 }
 
@@ -162,7 +158,8 @@ impl PipelineStage for ReportStage {
     }
 
     fn execute(&self, ctx: &mut PipelineContext) -> Result<(), String> {
-        let (groups, _errs) = ctx.engine.currency_groups(&ctx.parsed); ctx.report.currency_groups = groups;
+        let (groups, _errs) = ctx.engine.currency_groups(&ctx.parsed);
+        ctx.report.currency_groups = groups;
         ctx.report.recompute_status();
         let error_count = ctx.report.error_count();
         let mut gate = ctx.engine.release_gate.lock().unwrap();
@@ -191,7 +188,7 @@ impl PipelineStage for OutputStage {
                 .ok_or_else(|| format!("output path has no parent: {}", out_path.display()))?;
             std::fs::create_dir_all(dir)
                 .map_err(|e| format!("cannot create output folder {}: {e}", dir.display()))?;
-            std::fs::write(out_path, content)
+            wellfit_core::text::write_atomic(out_path, content.as_bytes())
                 .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
         }
         Ok(())

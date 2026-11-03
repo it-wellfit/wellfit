@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! Wellfit CLI - single native entry point for the three product waves.
 //!
@@ -689,7 +689,9 @@ fn run_shopee(
         }
     }
 
-    let erp_csv = engine.generate_fuyi_erp_import_csv(&valid);
+    let erp_csv = engine
+        .generate_fuyi_erp_import_csv(&valid)
+        .map_err(|e| format!("cannot generate ERP import CSV: {e}"))?;
     let out_path = output
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| input.with_file_name("fuyi_erp_import.csv"));
@@ -699,7 +701,7 @@ fn run_shopee(
                 .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
         }
     }
-    fs::write(&out_path, erp_csv)
+    wellfit_core::text::write_atomic(&out_path, erp_csv.as_bytes())
         .map_err(|e| format!("cannot write {}: {e}", out_path.display()))?;
     kv(ui, "ERP import batch", &out_path.display().to_string());
 
@@ -924,7 +926,8 @@ fn run_mtrix(
                     .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
             }
         }
-        fs::write(path, json).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        wellfit_core::text::write_atomic(path, json.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         kv(ui, "report", &path.display().to_string());
     }
 
@@ -989,7 +992,8 @@ fn run_mtrix(
         }
         let json =
             serde_json::to_string_pretty(&docs).map_err(|e| format!("export knowledge: {e}"))?;
-        fs::write(path, json).map_err(|e| format!("write export: {e}"))?;
+        wellfit_core::text::write_atomic(path, json.as_bytes())
+            .map_err(|e| format!("write export: {e}"))?;
         info(
             ui,
             &format!(
@@ -1296,7 +1300,8 @@ fn run_audit(
                     .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
             }
         }
-        fs::write(path, json).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        wellfit_core::text::write_atomic(path, json.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         kv(ui, "audit report", &path.display().to_string());
     }
 
@@ -2007,11 +2012,11 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             batch_date,
             encoding,
             esun_url,
-            source_system: _,
-            customer_id: _,
-            payer_account: _,
-            payer_id: _,
-            format_type: _,
+            source_system,
+            customer_id,
+            payer_account,
+            payer_id,
+            format_type,
             client_cert_path,
             client_key_path,
             ca_cert_path,
@@ -2039,15 +2044,42 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
             } else {
                 batch_date.clone()
             };
+
+            // Construct the export config from CLI parameters.
+            // All parameters are passed through, not ignored.
+            let export_config = wellfit_bankpay::BankpayExportConfig::new(
+                source_system.clone().unwrap_or_else(|| {
+                    warn(
+                        ui,
+                        "source_system not provided, using default 'ERP-BANKPAY'",
+                    );
+                    "ERP-BANKPAY".to_string()
+                }),
+                customer_id.clone().unwrap_or_else(|| {
+                    warn(ui, "customer_id not provided, using default '00000000'");
+                    "00000000".to_string()
+                }),
+                payer_account.clone().unwrap_or_default(),
+                payer_id.clone().unwrap_or_default(),
+                format_type.clone(),
+            );
+
             let spin = Spinner::new(
                 "exporting payable vouchers to bank media file...",
                 ui.color_enabled(),
             );
-            let result = engine.export_vouchers(input, batch, &batch_date, enc, |_media| {
-                // Production transport would send the media file to E.Sun
-                // over TLS. Here we record success without network I/O.
-                Ok(true)
-            });
+            let result = engine.export_vouchers(
+                input,
+                batch,
+                &batch_date,
+                enc,
+                Some(export_config),
+                |_media| {
+                    // Production transport would send the media file to E.Sun
+                    // over TLS. Here we record success without network I/O.
+                    Ok(true)
+                },
+            );
             spin.finish(Some("bank media file assembled"));
 
             match result {
@@ -2058,6 +2090,11 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
                     kv(ui, "file sha256", &r.file_sha256);
                     kv(ui, "vouchers accepted", &r.vouchers_accepted.to_string());
                     kv(ui, "vouchers isolated", &r.vouchers_isolated.to_string());
+                    kv(
+                        ui,
+                        "api dispatch attempted",
+                        &r.api_dispatch_attempted.to_string(),
+                    );
                     kv(ui, "dispatched", &r.dispatched.to_string());
                     kv(ui, "release state", &r.release_state);
                     ok(ui, "bankpay export complete");
@@ -2145,14 +2182,3 @@ fn html_escape(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
-
-
-
-
-
-
-
-
-
-
-

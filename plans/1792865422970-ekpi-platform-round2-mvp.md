@@ -1,5 +1,7 @@
 # EKPI Platform Round 2 — MVP Implementation Plan
 
+> **Disposition (2026-11-02): Historical proposal, not an approved current roadmap.** This EKPI-scoped plan is stored under `Wellfit/plans/`; its baseline and tasks must be reconciled in `ekpi-platform/` against [its charter](../../ekpi-platform/PROJECT_CHARTER.md) and current test evidence.
+
 **Goal**: First executable, testable, demonstrable version: document import + version tree + clause anchors, hybrid retrieval with verbatim citations, rule library (JSON Schema + LegalRuleML export), process verification prototype (Petri net token replay / PM4Py sidecar), decision snapshot + replay, and real eval adapters.
 
 **Scope**: Round 2 bricks R2-1..R2-7 from `docs/tech-selection-round1.md §6`. Web UI (axum + Maud) deferred to Round 3; this round delivers Rust crates + CLI + eval harness integration.

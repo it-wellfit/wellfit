@@ -2,8 +2,9 @@
 
 > Plan ID: 1792486147134-dev-workflow-upgrade  
 > 建立日期: 2026-10-25  
-> 狀態: Implementation-Ready  
-> 範圍: `Dev\Wellfit`（5-crate Rust 工作區）+ `哈瓦士串接專案` + `Knowledge`（知識庫）
+> 狀態: Historical proposal — not execution-ready (reviewed 2026-11-02)
+
+> 範圍: 原始草案記載 5-crate workspace；現有 manifest 已列 7 crates。Knowledge 依賴與驗證基線未重新確認，請先讀 `../PLAN.md`。
 
 ---
 

@@ -9,9 +9,10 @@
 //! row is read: a report that does not carry every required column is rejected
 //! with an error naming the missing column, and no row is read.
 
+use csv::{ReaderBuilder, StringRecord};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, OnceLock};
-use wellfit_core::contract::{split_header, ColumnContract, ColumnMap};
+use wellfit_core::contract::{ColumnContract, ColumnMap};
 use wellfit_core::ledger::IdempotencyLedger;
 use wellfit_core::mutex::{DesktopSessionMutex, WorkWave};
 use wellfit_core::release_gate::ReleaseGate;
@@ -142,16 +143,24 @@ impl ReportAutomator {
         let mut valid_records = Vec::new();
         let mut errors = Vec::new();
 
-        // 1. Parse lines
-        let records: Vec<(usize, &str)> = wellfit_core::text::split_records(csv_content);
-        if records.is_empty() {
+        let parse_content = csv_content.strip_prefix('\u{feff}').unwrap_or(csv_content);
+        wellfit_core::text::validate_delimited_csv(parse_content, b',')?;
+        let mut reader = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(parse_content.as_bytes());
+        let mut header = StringRecord::new();
+        let has_header = reader
+            .read_record(&mut header)
+            .map_err(|error| format!("Invalid inventory report CSV header: {error}"))?;
+        if !has_header {
             return Ok((valid_records, errors));
         }
 
         // 2. Resolve the column contract. A violation fails the whole report:
         //    the batch is not registered, so the identifier stays available for
         //    a corrected re-export.
-        let columns = match resolve_columns(records[0].1) {
+        let columns = match resolve_columns(&header) {
             Ok(columns) => columns,
             Err(e) => {
                 let mut gate = self.release_gate.lock().unwrap();
@@ -190,19 +199,33 @@ impl ReportAutomator {
             ));
         }
 
-        for (row_line, line) in records.iter().skip(1) {
-            let row_line = *row_line;
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
+        for result in reader.records() {
+            let record = result.map_err(|error| {
+                let line = error
+                    .position()
+                    .map(|position| position.line().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                format!("Invalid inventory report CSV near line {line}: {error}")
+            })?;
+            let row_line = record
+                .position()
+                .map(|position| usize::try_from(position.line()))
+                .transpose()
+                .map_err(|error| format!("Invalid inventory report CSV line number: {error}"))?
+                .ok_or_else(|| {
+                    "Inventory report CSV record is missing its source position".to_string()
+                })?;
+            if record.iter().all(|field| field.trim().is_empty()) {
                 continue;
             }
 
-            let cols: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
+            let serialized_record = || wellfit_core::text::serialize_csv_record(&record, b',');
+            let cols: Vec<&str> = record.iter().map(str::trim).collect();
             if cols.len() < column_count {
                 self.quarantine(
                     batch_id,
                     row_line,
-                    line,
+                    &serialized_record()?,
                     "ERR_INV_INSUFFICIENT_COLUMNS",
                     format!(
                         "Expected at least {} columns, got {}",
@@ -210,7 +233,7 @@ impl ReportAutomator {
                         cols.len()
                     ),
                     &mut errors,
-                );
+                )?;
                 continue;
             }
 
@@ -242,11 +265,11 @@ impl ReportAutomator {
                 self.quarantine(
                     batch_id,
                     row_line,
-                    line,
+                    &serialized_record()?,
                     "ERR_INV_NUMBER_FORMAT",
                     reason,
                     &mut errors,
-                );
+                )?;
                 continue;
             }
             let [begin_inv, in_qty, out_qty, adj_qty, end_inv] = quantities;
@@ -270,11 +293,11 @@ impl ReportAutomator {
                 self.quarantine(
                     batch_id,
                     row_line,
-                    line,
+                    &serialized_record()?,
                     "ERR_INV_BALANCE_MISMATCH",
                     reason,
                     &mut errors,
-                );
+                )?;
             } else {
                 valid_records.push(record);
             }
@@ -285,7 +308,9 @@ impl ReportAutomator {
         if !is_clean {
             // The report was defective, so the batch claim is released: a
             // corrected re-export under the same batch identifier is accepted.
-            let _ = self.ledger.release_file_batch(batch_id);
+            self.ledger
+                .release_file_batch(batch_id)
+                .map_err(|e| format!("Database error releasing report batch: {e}"))?;
         }
         let mut gate = self.release_gate.lock().unwrap();
         gate.verify_payload(
@@ -334,28 +359,30 @@ impl ReportAutomator {
         code: &str,
         reason: String,
         errors: &mut Vec<ReportRowError>,
-    ) {
-        let _ = self.ledger.log_quarantine(
-            batch_id,
-            FUYI_SOURCE_FILE,
-            line_number,
-            raw_value,
-            code,
-            &reason,
-        );
+    ) -> Result<(), String> {
+        self.ledger
+            .log_quarantine(
+                batch_id,
+                FUYI_SOURCE_FILE,
+                line_number,
+                raw_value,
+                code,
+                &reason,
+            )
+            .map_err(|e| format!("Database error recording report quarantine: {e}"))?;
         errors.push(ReportRowError {
             line: line_number,
             raw: raw_value.to_string(),
             code: code.to_string(),
             reason,
         });
+        Ok(())
     }
 }
 
 /// Resolve the column contract against a header line.
-fn resolve_columns(header_line: &str) -> Result<ColumnMap, String> {
-    let header: Vec<String> = split_header(header_line, ',');
-    let names: Vec<&str> = header.iter().map(String::as_str).collect();
+fn resolve_columns(header: &StringRecord) -> Result<ColumnMap, String> {
+    let names: Vec<&str> = header.iter().collect();
     fuyi_inventory_report_contract()
         .resolve(&names)
         .map_err(|e| format!("Fuyi report column contract violation: {e}"))
@@ -405,6 +432,40 @@ mod tests {
         assert_eq!(valid[0].warehouse_code, "WH-A");
         assert_eq!(valid[1].adj_qty, -5);
         assert_eq!(gate.lock().unwrap().state, ReleaseState::VerifiedPass);
+    }
+
+    #[test]
+    fn test_csv_quoted_delimiter_and_embedded_newline_are_preserved() {
+        let (automator, _gate, _ledger) = automator();
+        let csv = "ITEM_NO,ITEM_NAME,WAREHOUSE_CODE,BEGIN_INV,IN_QTY,OUT_QTY,ADJ_QTY,END_INV\r\n\
+                   8,\"Havaianas, Top\r\nBlack\",WH-A,100,50,30,0,120\r\n";
+
+        let (valid, errors) = automator
+            .parse_native_csv_report(csv, "BATCH-RPT-CSV-001")
+            .unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(valid.len(), 1);
+        assert_eq!(valid[0].item_name, "Havaianas, Top\r\nBlack");
+    }
+
+    #[test]
+    fn test_malformed_csv_is_rejected_before_claiming_the_batch() {
+        let (automator, _gate, _ledger) = automator();
+        let malformed =
+            "ITEM_NO,ITEM_NAME,WAREHOUSE_CODE,BEGIN_INV,IN_QTY,OUT_QTY,ADJ_QTY,END_INV\n\
+                         8,\"Havaianas Top Black,WH-A,100,50,30,0,120";
+        assert!(automator
+            .parse_native_csv_report(malformed, "BATCH-RPT-CSV-002")
+            .is_err());
+
+        let corrected =
+            "ITEM_NO,ITEM_NAME,WAREHOUSE_CODE,BEGIN_INV,IN_QTY,OUT_QTY,ADJ_QTY,END_INV\n\
+                         8,Havaianas Top Black,WH-A,100,50,30,0,120\n";
+        let (valid, errors) = automator
+            .parse_native_csv_report(corrected, "BATCH-RPT-CSV-002")
+            .unwrap();
+        assert_eq!(valid.len(), 1);
+        assert!(errors.is_empty());
     }
 
     #[test]

@@ -1,5 +1,9 @@
 # Wellfit MTRIX Spec Alignment & Quality Management Plan
 
+> **Disposition (2026-11-02): Historical proposal — not execution-ready.** This document duplicates older MTRIX plans and reports a 5-crate/131-test baseline that conflicts with the current seven-crate manifest and 2026-10-25 state snapshot. See [`../PLAN.md`](../PLAN.md) before deriving any current task.
+
+> The verification table below records a historical result only; it has not been rerun on the current worktree.
+
 ## 1. Context
 
 This project is a 5-crate Rust workspace at `C:\Users\stephanie.huang\Desktop\新人訓練\Projects\2026\Dev\Wellfit\` implementing the Alpargatas MTRIX interface (five CSV file types: ALTHCI Customer, ALTHES Inventory, ALTHFV Sales Force, ALTHPD Product, ALTHVD Sales).

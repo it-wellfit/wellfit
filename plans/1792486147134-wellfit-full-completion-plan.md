@@ -3,7 +3,7 @@
 > Plan ID: `1792486147134-wellfit-full-completion-plan`
 > Scope: `Dev/Wellfit` (5-crate Rust workspace) + `哈瓦士串接專案` (spec/samples) + `Knowledge` (knowledge base)
 > Method: local-first workflow, TDD per slice, evidence-based, no counterparty assumptions without registration
-> Status: Plan only — no source edits in this pass
+> Status: Historical proposal — not execution-ready (reviewed 2026-11-02). Its five-crate baseline and open tasks are unverified against the current seven-crate workspace; see `../PLAN.md` and `../docs/project/CURRENT_STATE.md`.
 
 ## 1. Objective
 

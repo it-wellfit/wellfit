@@ -1,8 +1,8 @@
 # UI/UX Enhancement Plan — Toolkits, Toolchains & Templates
 
-> 文件編號：KNB-UX-001｜狀態：Draft｜版本：v1.0｜日期：2026-10-24
+> 文件編號：KNB-UX-001｜狀態：Draft — 未核准、非執行計畫｜版本：v1.0｜日期：2026-10-24
 > 撰寫：Wellfit 知識庫維護者｜審閱：未審閱｜核准：未核准
-> 適用範圍：Dev/Wellfit（5-crate Rust 工作區）＋ Knowledge/tools/compliance（PowerShell 工具鏈）＋ Knowledge/compliance/iso-27001/templates 與 forms（CSV 範本與表單）
+> 適用範圍：原草案記載 Dev/Wellfit（5-crate Rust 工作區）及 Knowledge 路徑；目前 crate 基線、文件所有權與需求均未重驗，請先依 `../PLAN.md` 拆分或裁定。
 > 驗證標記：✔ 已對原始文件逐字查證｜△ 依標準條文或通行做法推導｜未驗證 本次無法確認
 
 ---

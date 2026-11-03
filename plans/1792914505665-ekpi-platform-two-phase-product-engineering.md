@@ -1,5 +1,7 @@
 # EKPI Platform — 0→1 MVP Completion + MVP→Production-Grade Path
 
+> **Disposition (2026-11-02): Historical proposal, not an approved current roadmap.** This EKPI-scoped plan is stored under `Wellfit/plans/`; its gate and task status is an old snapshot. Reconcile only in `ekpi-platform/` against [its charter](../../ekpi-platform/PROJECT_CHARTER.md) and current test evidence.
+
 ## Framework
 
 Matt Pocock skills-based product engineering framework, two phases:

@@ -1,74 +1,42 @@
-# Wellfit MTRIX Spec Alignment & Knowledgebase Build Plan
+# Wellfit Plan Register
 
-## Context
+**Status:** Review register; not an approved implementation plan
 
-5-crate Rust workspace at `C:\Users\stephanie.huang\Desktop\新人訓練\Projects\2026\Dev\Wellfit\` implementing the Alpargatas MTRIX interface (five CSV file types: ALTHCI Customer, ALTHES Inventory, ALTHFV Sales Force, ALTHPD Product, ALTHVD Sales).
+**Reviewed:** 2026-11-02
+**Last published verification snapshot:** [CURRENT_STATE.md](docs/project/CURRENT_STATE.md), dated 2026-10-25
 
-## Current State — All Previously Identified Defects FIXED
+This file replaces the stale, task-level plan previously stored at this path. It records plan ownership and conflicts; it does not certify the current code or test status. At review time, Wellfit had extensive uncommitted code and documentation changes. No build, test, or lint run was performed for this documentation review.
 
-| Defect | Location | Status |
-|--------|----------|--------|
-| D-01 VR-05 aggregation bug | `mtrix_engine.rs:730-743` | FIXED — uses `current` value, not re-reading from row |
-| D-02 Cross-file line number reporting | `mtrix_engine.rs:831-852` | FIXED — `row_lines.get(offset).copied().unwrap_or(offset + 2)` |
-| D-03 Floating-point money parsing | `shopee_engine.rs:124` | FIXED — `parse_money_cents()` pure integer i64 arithmetic |
-| D-04 Report integer overflow | `report_automator.rs:46` | FIXED — `checked_add`/`checked_sub` chain |
-| D-05 CR-only line endings | `wellfit_core\src\text.rs` | FIXED — `split_records` handles CR/LF/CRLF |
-| D-06 Positional fallback in shopee | `shopee_engine.rs` | FIXED — all column access through contract map |
-| H-01 MDM `normalize_store_type("")` | `mdm.rs` | FIXED — returns `""`, not `"Online"` |
-| H-02 VR-08 conflation | `mtrix_engine.rs` | FIXED — VR-08/Customer, VR-09/Batch, VR-10/Salesperson are separate |
-| H-03 Shopee `parse_money_cents` | `shopee_engine.rs` | FIXED — handles negative and scientific notation |
+## Current authority and evidence
 
-### Verification Status (ALL PASSING)
-- `cargo build --workspace` — zero errors
-- `cargo clippy --workspace --all-targets -- -D warnings` — zero warnings
-- `cargo test --workspace --no-fail-fast` — 131 passed, 0 failed
-- `wellfit mtrix` — 5 files, 22 errors, 29 warnings, 37 repairs
-- `wellfit audit` — 5 files, 56 fields, 15 rules
-- `wellfit spec` — complete 56-field dictionary
+- Product entry and seven-crate inventory: [README.md](README.md) and [Cargo.toml](Cargo.toml). The README has local edits and must be reconciled before treating its claims as approved documentation.
+- Last recorded test and release snapshot: [docs/project/CURRENT_STATE.md](docs/project/CURRENT_STATE.md). Its results are historical; they are not evidence for the current worktree.
+- Project and document navigation: [docs/project/PROJECT_OVERVIEW.md](docs/project/PROJECT_OVERVIEW.md) is the Wellfit-wide overview; [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) is BankPay-specific; [docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md) maps the BankPay documentation.
+- Plan corpus: [plans/](plans/). The 55 Markdown files include execution proposals, reference material, and ADRs; they are not 55 active plans.
 
-## Remaining Work
+## Plan disposition
 
-### Phase 1: Remaining P0/P1 Fixes
+| Workstream | Existing documents | Disposition and next gate |
+|---|---|---|
+| MTRIX / Wellfit completion | `1792486147134-mtrix-comprehensive-implementation.md`, `1792486147134-mtrix-deep-implementation.md`, `1792486147134-mtrix-full-completion-v2.md`, lifecycle and completion plans | Near-duplicate historical proposals use stale or conflicting baselines. Revalidate the worktree first, then retain only evidenced open requirements in one approved backlog. Do not execute their old test counts or LOCAL task lists as current facts. |
+| Lifecycle / enterprise delivery / sync architecture | `docs/完整實作計畫.md`, `docs/COMPLETE_MULTI_LAYER_SOLUTION.md`, `docs/ENTERPRISE_PRODUCT_DELIVERY.md`, `docs/LOCAL_FIRST_PRODUCT_DELIVERY.md`, `docs/MULTIPLATFORM_SYNC_ARCHITECTURE.md`, `docs/ENTERPRISE_AI_AUTOMATION_RUNTIME.md` | Overlapping historical roadmaps and design proposals, not active task lists or delivery evidence. Preserve unique requirements, but use this register and the current project snapshot—not old “complete,” test-count, SLA, or technology claims—to authorize work. Consolidate only after checking inbound links and owner approval. |
+| ISO / ISMS | `KNB-MASTER.md`, `KNB-ISO-MASTER.md`, `KNB-INDUSTRY-MASTER.md`, `KNB-PHASE2.md`, `KNB-ENG-SYSTEM.md`, `001`–`010`, full-scope ISMS proposals | **Recommended document structure (not owner approval):** use `KNB-MASTER.md` as a short governance/index document; `KNB-ISO-MASTER.md` as the sole detailed ISO-control reference; `KNB-INDUSTRY-MASTER.md` as a non-binding applicability proposal. The 001–010 set is historical input, not a second active plan. Keep implementation blocked until an accountable owner approves organizational scope, identity/SSO assumptions, applicable standards, and a single execution roadmap. |
+| EKPI | EKPI plans currently stored in `Wellfit/plans/` and `Wellfit/.kilo/plans/` | These belong to a separate project and contain overlapping MVP / product-gap tracks. Do not treat them as Wellfit work. Reconcile only in `ekpi-platform/` against its charter and current evidence. |
+| E.Sun / BankPay | `1793034142477-esun-flaps-ap-voucher-integration.md`, `docs/bankpay/`, `docs/esun-bank-flaps-erp-integration/` | **Protocol decision resolved from the checked-in E.Sun V2.8 technical PDF:** API through the bank security component is the primary integration; `formatType=2` is JSON and `formatType=1` is a fixed-width file for the documented one-debit/one-credit case. `docs/bankpay/` is the project decision/interface set. The four files under `docs/esun-bank-flaps-erp-integration/` are retained historical summaries with unverified completion and file-first claims; do not use them as acceptance evidence. Sandbox credentials, production account setup, actual CLI dispatch, and end-to-end bank validation remain blocked. |
+| Returns / finance automation | `1793033568961-wellfit-returns-finance-automation.md` and E.Sun integration plans | Keep domain requirements separate, but identify shared ledger / release-gate tasks once source formats and decision owners are known. Returns assumptions and ownership remain unresolved. |
+| Encoding / data formats | `1792994615266-encoding-modernization-plan.md`, `1792994615266-encoding-optimization-utf8-zh.md` | The old “missing UTF-8 baseline” is stale but the plan is only partly implemented: root `.editorconfig` and `scripts/encoding-tools.ps1` exist; the script lists Base91/Z85 commands, not Base122 or secure-pack. The root `.editorconfig` combines multiple properties on single lines and cannot be treated as valid EditorConfig; Wellfit `.gitattributes` lacks an encoding declaration and SyncMesh has no project `.gitattributes`. Keep one required baseline/config-validation task; defer speculative Base122, secure-envelope, and analytics-format work. |
+| Workflow, toolchain, UI/UX, research, AI materialization, and skills | Remaining dated proposals in `plans/`; workspace proposals in `.kilo/plans/` | Proposals only unless an owner, current deliverable, dependency, source provenance, and acceptance evidence are supplied. The skill-pack task is blocked on the absent source archive/hash verification. Cross-project architecture and Flaps/JEV proposals are not implementation authority. ADRs and architecture/flowchart references are not execution plans. |
 
-**T1: LOCAL-048 — Account/Counterparty Cumulative Scope in Ledger**
-File: `crates/wellfit_core\src\ledger.rs`
-Current: `IdempotencyLedger` tracks per-batch metadata (file_hash, record_count) but does NOT track cumulative balances per customer/account across batches.
-Fix:
-- Add `cumulative_balance` column to `quarantine_log` or a new `cumulative_balance` table
-- Add `MdmCatalog::register_cumulative(batch_id, customer_id, amount_cents)`
-- Add `MdmHub::get_cumulative_balance(customer_id: &str) -> Option<i64>`
-- Add test: `test_cumulative_balance_accumulates_across_batches()`
+## Next actions (ordered)
 
-### Phase 2: Documentation & Knowledge Base
+1. Reconcile the current code, documentation, and test evidence in a clean review snapshot; update `CURRENT_STATE.md` only with commands actually run and results actually observed.
+2. Keep the API-first E.Sun decision and remaining sandbox/production blockers maintained in the BankPay decision register; treat other copies as navigation summaries, not separate decisions.
+3. Obtain accountable-owner approval for ISMS scope, identity assumptions, and applicable standards. Until then, the proposed document hierarchy above is navigation guidance only, not a compliance program.
+4. Assign one owner and one approved execution plan per active workstream. Each plan must state status, last verified evidence/date, dependencies/blockers, acceptance criteria, and the document it supersedes.
+5. Mark superseded proposals in place with a link to their replacement. Preserve ADRs and reference material; do not delete or bulk-move files until unique requirements and inbound links are reconciled.
 
-**T2: LOCAL-053 — Report vs Ledger Count Discrepancy Documentation**
-Files: `crates\wellfit_cli\src\main.rs`, `docs/CLI.md`, `AGENTS.md`
-The audit report's per-batch counts (errors, warnings) differ from `wellfit status` ledger counts because they measure different scopes (per-batch vs cumulative). Document this distinction clearly.
+## Evidence-based decision notes
 
-**T13: Update AGENTS.md** — Document all CLI subcommands, environment variables, release gate states
-**T14: Update docs/ARCHITECTURE.md** — Add three-stage pipeline diagram, Release Gate state machine, data flow diagram
-
----
-
-## 7. Verification Criteria
-
-| Check | Expected |
-|-------|----------|
-| `cargo build --workspace` | Zero errors |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Zero warnings |
-| `cargo test --workspace --no-fail-fast` | 131+ passed, 0 failed |
-| `wellfit mtrix --dir spec/fixtures/mtrix/delivered` | 5 files, 22 errors, 29 warnings, 37 repairs |
-| `wellfit audit --data-dir data` | 5 files, 56 fields, 15 rules |
-| `wellfit spec --format markdown` | Complete 56-field dictionary |
-| `wellfit shopee --input data/shopee_orders.csv` | 2 orders accepted, 0 isolated |
-| `wellfit reports --input data/fuyi_inventory_report.csv --recipient finance@dachen.com.tw` | 4 records processed, 0 isolated |
-
----
-
-## 8. Next Steps
-
-1. Implement LOCAL-048 (cumulative balance tracking in ledger)
-2. Implement LOCAL-049 (release batch claim when rows isolated)
-3. Implement LOCAL-053 (document report vs ledger count distinction)
-4. Update AGENTS.md, docs/ARCHITECTURE.md, docs/CLI.md
-5. Run full verification suite
+- **Bank transport:** The checked-in [`V2.8 technical specification`](docs/bankpay/references/【玉山銀行】企業ERP銀企直連串接_技術文件V2.8_v1.pdf) documents API access through the E.Sun security component, JSON format (`formatType=2`), and a file format (`formatType=1`) restricted to the specified one-debit/one-credit transaction. Its separate 422-character media-file specification is not evidence that the whole integration should be file-drop based. Use the API as the canonical boundary; retain the media payload only where the API contract calls for it. The bank sandbox/account and live acceptance are still pending in [`08-open-questions-and-decisions.md`](docs/bankpay/08-open-questions-and-decisions.md).
+- **AI/data boundary:** The Flaps architecture proposal explicitly says ERP data must remain local, while the Phase 2 plan proposes a cloud fallback. The consistent safe default is local-only inference; no cloud transfer until the data owner approves the data classification, provider, retention, and authorization controls in writing.
+- **Standards claims:** Version/date assertions in the ISMS masters remain unverified against the official catalogue. The catalogue request returned HTTP 403 during this review; that is an access failure, not evidence for or against any edition. Do not use the tables as compliance evidence until each entry has a primary-source citation and applicability approval.

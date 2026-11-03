@@ -1,6 +1,6 @@
 # Wellfit Engineering System Upgrade — Plan Mode Execution Plan
 
-> 文件編號：KNB-ENG-SYSTEM｜狀態：Active｜版本：v1.0｜日期：2026-10-25
+> 文件編號：KNB-ENG-SYSTEM｜狀態：Blocked — 與 KNB-MASTER／KNB-ISO-MASTER／KNB-PHASE2 的執行權威未裁定｜版本：v1.0｜日期：2026-10-25
 > 適用範圍：Wellfit MTRIX Rust 代碼庫 + 企業級 ISMS
 > 本輪模式：Plan Mode（唯讀盤點、分析、提出方案；不修改程式碼）
 

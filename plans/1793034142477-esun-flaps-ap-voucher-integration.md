@@ -1,9 +1,12 @@
 # 玉山銀行網銀 ↔ 輔翼ERP(FlapsErp) 應付憑單雙向串接與可追溯查詢 — 實作計畫
 
 **版本**: v1.0  
-**狀態**: 設計定案，待實作  
+**狀態**: Superseded historical proposal — do not execute this file-based design
+
 **適用**: E.Sun Bank 企業網銀(玉山收付通) 與 FlapsErp (C:\SYSTEM_PROGRAM_DIRECTORY\FlapsErp) 應付憑單  
 **關鍵約定**: 雙向、快速、安全、易追查、多格式、符合法規、持續演進；不使用 Docker、不使用商業 RPA 授權、Windows 原生二進位部署
+
+> **Disposition (2026-11-02):** This plan predates review of the local [`E.Sun V2.8 technical specification`](../docs/bankpay/references/【玉山銀行】企業ERP銀企直連串接_技術文件V2.8_v1.pdf) and contains superseded file-drop assumptions in its decisions, flows, tasks, risks, and acceptance criteria. The supported design is API-first through the bank security component; JSON (`formatType=2`) is the default, with the documented one-debit/one-credit file payload (`formatType=1`) only where applicable. Use [`docs/bankpay/`](../docs/bankpay/) for maintained requirements and decisions. Do not execute this historical plan. Sandbox/account access and end-to-end validation remain pending. The 6-crate, 148-test, and Clippy claims below are also unverified historical assertions.
 
 ---
 

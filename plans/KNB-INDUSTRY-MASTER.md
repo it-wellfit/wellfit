@@ -1,26 +1,27 @@
-# 電商、百貨、財會與製造業 — 國際標準完整導入主控規範
+# 電商、百貨、財會與製造業 — 標準適用性盤點提案
 
-> 文件編號：KNB-INDUSTRY-MASTER｜狀態：Draft｜版本：v1.0｜日期：2026-10-25
+> 文件編號：KNB-INDUSTRY-MASTER｜狀態：Proposed — applicability and scope not approved｜版本：v1.0｜日期：2026-10-25
 > 適用產業：電商 (E-Commerce)、百貨零售 (Retail)、財會 (Accounting/Finance)、製造業 (Manufacturing)
-> 本文件為從零建立的完整國際標準導入規範，涵蓋所有相關國際標準、工具包、實施步驟與驗證機制
+> 本文件是候選標準清單，不是完整標準目錄、核准範圍或導入計畫。
+
+> **Disposition (2026-11-02): Non-binding proposal.** Neither the named industries nor their legal, contractual, certification, or customer requirements have been approved as Wellfit scope. Standard editions, publication dates, applicability, and “covered/implemented” claims are not independently verified; do not treat this catalogue as a compliance commitment or execution plan.
 
 ---
 
 ## 1. 執行摘要
 
-本文件為適用於電商、百貨、財會與製造業的**完整國際標準導入主控規範**。涵蓋：
+以下為提案中的標準盤點，並非 Wellfit 已核准的適用產業、法規義務或控制項基線：
 
-- **已盤點標準**：35+ 項國際標準，分為 6 大類別
-- **已實作控制項**：Wellfit 代碼庫已實作 16/93 ISO 27001:2022 控制項 + 5 份 ISO 規劃文件
-- **新增標準**：本文件新增 20+ 項尚未涵蓋的產業相關標準
-- **工具包**：整合開源與商業工具，提供快速導入路徑
-- **實施步驟**：分階段、可追溯、可驗證的導入流程
+- **文件內列出的標準數量**：作者宣稱 35+ 項、分為 6 類；未核實來源與完整性
+- **歷史控制項宣稱**：16/93 的實作數與測試基線未在目前工作樹驗證
+- **候選標準**：文件列出 20+ 個可能項目；須由業務、法務及資安負責人依實際義務篩選
+- **工具與實施步驟**：僅為候選方案，未經成本、授權、適用性及責任人核准
 
 ---
 
 ## 2. 標準盤點與差距分析
 
-### 2.1 已涵蓋的標準（Wellfit 現有）
+### 2.1 文件聲稱已涵蓋的標準（未驗證）
 
 | 標準 | 版本 | 狀態 | 涵蓋程度 |
 |------|------|------|----------|
@@ -33,7 +34,7 @@
 | ISO/IEC 42001 | 2023 | 📋 規劃中 | AI 治理 |
 | SOX 404 | 2002 | 📋 規劃中 | 財務內部控制 |
 
-### 2.2 尚未涵蓋的標準（本文件新增）
+### 2.2 候選標準（適用性待核）
 
 #### 2.2.1 品質管理類
 

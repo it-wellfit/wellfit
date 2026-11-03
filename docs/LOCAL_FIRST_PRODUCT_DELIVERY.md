@@ -1,7 +1,7 @@
 # Wellfit 企業級產品 — 本地優先工作流與完整交付方案
 
 > 文件編號：KNB-PROD-LOCALFIRST-001｜版本：v1.0｜日期：2026-10-25
-> 狀態：可交付｜驗證標記：✔ 已對原始程式碼與文件逐字查證
+> 狀態：歷史交付方案，不能單獨作為目前生產就緒證明。文件內的 benchmark、效能目標及合規結果須以可重現輸出重新驗證；`wellfit_sync` 尚無資料傳輸功能。
 > 核心理念：本地優先 (Local-First) → 解決真實專業問題 → 協作與部署後置
 
 ---
@@ -37,7 +37,7 @@ graph TD
         G --> I[本地 MTRIX 檔案]
         G --> J[本地 JSON 報告]
 
-        K[wellfit_sync.exe] --> L[本地裝置清單]
+        K[wellfit_sync CLI] --> L[本機設定／裝置清單；目前無資料傳輸]
         K --> M[本地健康檢查]
 
         N[PowerShell 腳本] --> O[本地合規驗證]
@@ -75,7 +75,7 @@ graph TD
 | R-08 | 零浮點金額 | P0 | AGENTS.md | ScaledDecimal | 全 crate | cargo test | ✔ |
 | R-09 | 欄位名稱解析 | P0 | AGENTS.md | ColumnContract | 全 crate | cargo test | ✔ |
 | R-10 | 合規驗證 0 FAIL | P0 | ISMS 規範 | verify-compliance.ps1 | 全套件 | verify-compliance | ✔ |
-| R-11 | 多平台同步守護程式 | P1 | 本專案需求 | wellfit_sync | 8 CLI 命令 | cargo test | ✔ |
+| R-11 | 多平台同步 CLI | P1 | 本專案需求 | wellfit_sync | 設定、健康檢查及探索骨架；無資料傳輸 | cargo test 不驗證資料同步 | 部分實作 |
 | R-12 | Windmill 自動化部署 | P2 | 本專案需求 | 原生二進位 | Docker Compose / 原生 | 設計文件 | ✔ |
 | R-13 | ISMS 93 項控制 | P0 | ISO 27001:2022 | soa-93-controls.csv | build-control-trace | verify-compliance | ✔ |
 | R-14 | 四維控制狀態 | P0 | ISO 27001:2022 | vocab/control-status.csv | V-05 | verify-compliance | ✔ |
@@ -131,7 +131,7 @@ target/
 # 本地配置
 wellfit.toml
 devices.json
-sync.toml
+sync.json
 
 # 執行產出
 data/
@@ -186,7 +186,7 @@ data/
 | T-03 | 跨檔對照 (VR-08~VR-11) | 不一致的主檔 | 錯誤報告 | 主檔不存在、空主檔 |
 | T-04 | 修復規則 (ANOM-01~ANOM-12) | 各種異常資料 | 正確修復 | 邊界值、特殊字元 |
 | T-05 | 合規驗證 (V-01~V-20) | 26 個 CSV | PASS=631/WARN=0/FAIL=0 | 缺失欄位、非法值 |
-| T-06 | 同步守護程式 | 多裝置同步 | 正常同步 | 網路中斷、裝置離線 |
+| T-06 | Sync CLI／探索 | 設定與 peer 可達性 | 現有 CLI 行為；不執行資料傳輸 | 網路中斷、裝置離線；正式同步 E2E 待實作 |
 | T-07 | UI/UX 輸出 | 各種命令 | 正確格式化 | NO_COLOR、CI 模式 |
 
 ### 5.3 固定本地檢查腳本
@@ -238,12 +238,14 @@ exit 0
 
 ### 6.2 處理時間指標
 
-| 指標 | 定義 | 目標值 | 當前值 | 驗證方法 |
+下列數值是未附可重現負載、環境與原始輸出的歷史記錄，不是核准的目標或已驗收基準；目前不得用來推定容量或 SLA。
+
+| 指標 | 定義 | 歷史目標值（未核准） | 歷史記錄（未重驗） | 驗證方法 |
 |---|---|---|---|---|
-| MTRIX 處理時間 | 單批次處理耗時 | < 1s | < 5s | benchmark |
-| 合規驗證時間 | verify-compliance 耗時 | < 10s | ~8s | 實測 |
-| 建置時間 | cargo build 全量 | < 5min | ~2min | 實測 |
-| 測試時間 | cargo test 全量 | < 2min | ~1min | 實測 |
+| MTRIX 處理時間 | 單批次處理耗時 | 待定 | 待重測 | 固定資料集與環境的 benchmark |
+| 合規驗證時間 | verify-compliance 耗時 | 待定 | 待重測 | 記錄命令、環境與完整輸出 |
+| 建置時間 | cargo build 全量 | 待定 | 待重測 | 固定工具鏈與乾淨建置條件 |
+| 測試時間 | cargo test 全量 | 待定 | 待重測 | 記錄命令、環境與完整輸出 |
 
 ### 6.3 手動交接率指標
 
@@ -337,7 +339,7 @@ Phase 3: 全雲端模式 (大規模時)
 ### 8.2 超越市場軟體的關鍵設計
 
 1. **零依賴部署**：單一二進位檔，無需 Docker/Node.js/Python
-2. **Rust 零開銷**：記憶體 < 50MB，CPU < 5%，啟動 < 2s
+2. **資源效率**：記憶體、CPU 與啟動時間均待代表性工作負載與目標硬體量測，沒有已驗收門檻
 3. **SQLite 內嵌**：零資料庫配置，資料與程式同目錄
 4. **離線合規驗證**：20 項機械驗證，0 FAIL
 5. **多平台原生**：Windows/Linux/macOS/NAS 全平台
@@ -379,29 +381,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Knowledge/tools/compliance/n
 |---|---|---|---|
 | cargo check | 0 錯誤 | 0 錯誤 | ✔ |
 | cargo clippy | 0 警告 | 0 警告 | ✔ |
-| cargo test | 全部通過 | 131+ passed, 0 failed | ✔ |
-| verify-compliance | PASS>0/WARN=0/FAIL=0 | PASS=631/WARN=0/FAIL=0 | ✔ |
+| cargo test | 全部通過 | 最近 workspace run：237 passed、0 failed、3 ignored（2026-11-02） | ✔ |
+| verify-compliance | PASS>0/WARN=0/FAIL=0 | 歷史文件記錄：PASS=631/WARN=0/FAIL=0；本次未重跑 | 歷史記錄 |
 | validate-templates | 0 issues | 0 issues | ✔ |
 | check-scope-consistency | fail=0/warn=0 | fail=0/warn=0 | ✔ |
 | MTRIX 引擎 | 5/5 解析, 25/25 接受 | 5/5 解析, 25/25 接受 | ✔ |
-| wellfit_sync health | {"status":"ok"} | {"status":"ok"} | ✔ |
+| wellfit_sync health | `{"status":"ok"}` | `{"status":"ok"}` | 健康檢查可回應，不代表有資料傳輸 |
 
 ---
 
 ## 10. 結論
 
-Wellfit 企業級產品已完整開發並驗證，採用**本地優先 (Local-First)** 架構，解決了所有真實的專業問題。系統包含：
+Wellfit 採用本地優先 (Local-First) 的設計方向，但此文件是歷史方案與驗證紀錄，不能證明目前產品完整、生產就緒或已解決全部業務需求。當前證據包括一般 Rust workspace 測試與靜態檢查；容量、長時間負載、背壓、恢復和生產 SLA 尚未驗收。Sync 目前沒有資料傳輸。
 
-1. **6 個 Rust Crate**：完整實作所有功能模組
-2. **9 個 PowerShell 工具**：ISMS 合規驗證與 MTRIX 處理
-3. **20+ 份文件**：分析、管理、架構、交付文件
-4. **全量驗證通過**：0 FAIL，所有測試通過
+1. **7 個 Rust crates**：功能與成熟度依各 crate 個別驗證
+2. **PowerShell 工具與 ISMS 文件**：歷史資料應依目前檔案及可重現輸出重新驗證
+3. **處理管線**：不得從單元測試通過推論高負載或生產 SLA
 
-產品採用本地優先設計，超越市場軟體的雲端依賴，提供：
-- 完全離線可用
-- 資料主權完全控制
-- 零成本（全開源）
-- 最高效能（Rust 原生）
-- 完整可追溯性
-
-**全量驗證通過，0 FAIL，可正式交付。**
+是否可交付需以當前程式碼、正式業務契約、端到端故障測試與可重現容量報告共同判定；本文件中的歷史 PASS 數字不是上述驗收的替代品。

@@ -270,6 +270,8 @@ impl IdempotencyLedger {
         content: &[u8],
         record_count: usize,
     ) -> Result<bool> {
+        let record_count = i64::try_from(record_count)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let content_hash = Self::compute_sha256(content);
         let file_hash = match self.scope {
             BatchScope::Exclusive => content_hash.clone(),
@@ -295,7 +297,7 @@ impl IdempotencyLedger {
                 filename,
                 file_hash,
                 content_hash,
-                record_count as i64,
+                record_count,
                 now
             ],
         );
@@ -351,6 +353,59 @@ impl IdempotencyLedger {
         }
     }
 
+    /// Lock a group of orders in one SQLite transaction.
+    ///
+    /// The returned values correspond to the input order: `true` means this
+    /// call created the idempotency key; `false` means that key already existed.
+    pub fn check_and_lock_orders(
+        &self,
+        batch_id: &str,
+        orders: &[(String, i64)],
+    ) -> Result<Vec<bool>> {
+        self.check_and_lock_order_refs(
+            batch_id,
+            orders
+                .iter()
+                .map(|(order_no, amount_cents)| (order_no.as_str(), *amount_cents)),
+        )
+    }
+
+    /// Lock borrowed order keys in one SQLite transaction without copying them.
+    ///
+    /// The returned values correspond to the input order: `true` means this
+    /// call created the idempotency key; `false` means that key already existed.
+    pub fn check_and_lock_order_refs<'a, I>(&self, batch_id: &str, orders: I) -> Result<Vec<bool>>
+    where
+        I: IntoIterator<Item = (&'a str, i64)>,
+    {
+        let orders = orders.into_iter();
+        let mut results = Vec::with_capacity(orders.size_hint().0);
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let now = Utc::now().to_rfc3339();
+        let mut statement = tx.prepare_cached(
+            r#"
+            INSERT INTO transaction_keys (tx_key, batch_id, order_no, amount_cents, status, created_at)
+            VALUES (?1, ?2, ?3, ?4, 'LOCKED', ?5)
+            ON CONFLICT(tx_key) DO NOTHING
+            "#,
+        )?;
+        for (order_no, amount_cents) in orders {
+            let tx_key = self.order_key(order_no, batch_id);
+            let inserted = statement.execute(params![
+                tx_key,
+                batch_id,
+                order_no.trim(),
+                amount_cents,
+                now
+            ])?;
+            results.push(inserted == 1);
+        }
+        drop(statement);
+        tx.commit()?;
+        Ok(results)
+    }
+
     /// Release a batch claim so that a corrected re-send under the same
     /// identifier is accepted.
     ///
@@ -358,15 +413,17 @@ impl IdempotencyLedger {
     /// claim would force the sender to invent a new batch identifier for the
     /// corrected file, which the operational documentation does not ask for.
     pub fn release_file_batch(&self, batch_id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
             "DELETE FROM transaction_keys WHERE batch_id = ?1",
             params![batch_id],
         )?;
-        conn.execute(
+        tx.execute(
             "DELETE FROM file_batches WHERE batch_id = ?1",
             params![batch_id],
         )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -374,7 +431,13 @@ impl IdempotencyLedger {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT COUNT(*) FROM file_batches")?;
         let count: i64 = stmt.query_row((), |row| row.get(0))?;
-        Ok(count as usize)
+        usize::try_from(count).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Integer,
+                Box::new(error),
+            )
+        })
     }
 
     pub fn log_quarantine(
@@ -399,6 +462,8 @@ impl IdempotencyLedger {
 
     /// Record an isolated row together with the rule that isolated it.
     pub fn log_quarantine_with_severity(&self, finding: Finding<'_>) -> Result<()> {
+        let line_number = i64::try_from(finding.line_number)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let now = Utc::now().to_rfc3339();
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -410,7 +475,7 @@ impl IdempotencyLedger {
             params![
                 finding.batch_id,
                 finding.filename,
-                finding.line_number as i64,
+                line_number,
                 finding.key_value,
                 finding.rule_code,
                 finding.reason,
@@ -424,6 +489,8 @@ impl IdempotencyLedger {
 
     /// Record a validation finding that did not isolate a row.
     pub fn log_finding(&self, finding: Finding<'_>) -> Result<()> {
+        let line_number = i64::try_from(finding.line_number)
+            .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
         let now = Utc::now().to_rfc3339();
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -437,7 +504,7 @@ impl IdempotencyLedger {
                 finding.rule_code,
                 finding.severity.as_str(),
                 finding.filename,
-                finding.line_number as i64,
+                line_number,
                 finding.key_value,
                 finding.reason,
                 now
@@ -483,7 +550,7 @@ impl IdempotencyLedger {
             rule_code: row.get(2)?,
             severity: row.get(3)?,
             filename: row.get(4)?,
-            line_number: row.get::<_, i64>(5)? as usize,
+            line_number: Self::map_line_number(row, 5)?,
             key_value: row.get(6)?,
             reason: row.get(7)?,
             created_at: row.get(8)?,
@@ -526,11 +593,22 @@ impl IdempotencyLedger {
             id: row.get(0)?,
             batch_id: row.get(1)?,
             filename: row.get(2)?,
-            line_number: row.get::<_, i64>(3)? as usize,
+            line_number: Self::map_line_number(row, 3)?,
             raw_value: row.get(4)?,
             error_code: row.get(5)?,
             error_reason: row.get(6)?,
             quarantined_at: row.get(7)?,
+        })
+    }
+
+    fn map_line_number(row: &rusqlite::Row, column: usize) -> Result<usize> {
+        let line_number = row.get::<_, i64>(column)?;
+        usize::try_from(line_number).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                column,
+                rusqlite::types::Type::Integer,
+                Box::new(error),
+            )
         })
     }
 
@@ -585,6 +663,97 @@ mod tests {
     }
 
     #[test]
+    fn test_bulk_order_locking_preserves_input_order_and_duplicate_results() {
+        let ledger = IdempotencyLedger::in_memory().unwrap();
+        ledger
+            .register_file_batch("B1", "SHOPEE", "orders.csv", b"sample", 3)
+            .unwrap();
+        ledger
+            .check_and_lock_order("ORD-EXISTING", "B1", 500)
+            .unwrap();
+        let orders = [
+            ("ORD-001".to_string(), 100),
+            ("ORD-EXISTING".to_string(), 500),
+            ("ORD-001".to_string(), 100),
+        ];
+
+        assert_eq!(
+            ledger
+                .check_and_lock_order_refs(
+                    "B1",
+                    orders
+                        .iter()
+                        .map(|(order_no, amount_cents)| (order_no.as_str(), *amount_cents)),
+                )
+                .unwrap(),
+            vec![true, false, false]
+        );
+        assert!(ledger.is_order_processed("ORD-001").unwrap());
+    }
+
+    #[test]
+    fn test_bulk_order_locking_rolls_back_on_insert_failure() {
+        let ledger = IdempotencyLedger::in_memory().unwrap();
+        ledger
+            .register_file_batch("B1", "SHOPEE", "orders.csv", b"sample", 2)
+            .unwrap();
+        {
+            let conn = ledger.conn.lock().unwrap();
+            conn.execute_batch(
+                "CREATE TRIGGER reject_order_insert
+                 BEFORE INSERT ON transaction_keys
+                 WHEN NEW.order_no = 'ORD-FAIL'
+                 BEGIN
+                     SELECT RAISE(ABORT, 'injected order insert failure');
+                 END;",
+            )
+            .unwrap();
+        }
+        let orders = vec![("ORD-001".to_string(), 100), ("ORD-FAIL".to_string(), 200)];
+
+        assert!(ledger.check_and_lock_orders("B1", &orders).is_err());
+        assert!(!ledger.is_order_processed("ORD-001").unwrap());
+    }
+
+    #[test]
+    fn test_releasing_batch_is_atomic_when_batch_delete_fails() {
+        let ledger = IdempotencyLedger::in_memory().unwrap();
+        ledger
+            .register_file_batch("B1", "SHOPEE", "orders.csv", b"sample", 1)
+            .unwrap();
+        ledger.check_and_lock_order("ORD-001", "B1", 1000).unwrap();
+        {
+            let conn = ledger.conn.lock().unwrap();
+            conn.execute_batch(
+                "CREATE TRIGGER reject_batch_delete
+                 BEFORE DELETE ON file_batches
+                 BEGIN
+                     SELECT RAISE(ABORT, 'injected batch delete failure');
+                 END;",
+            )
+            .unwrap();
+        }
+
+        assert!(ledger.release_file_batch("B1").is_err());
+        assert!(ledger.is_order_processed("ORD-001").unwrap());
+        assert_eq!(ledger.count_file_batches().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_register_rejects_record_count_outside_sqlite_integer_range() {
+        let ledger = IdempotencyLedger::in_memory().unwrap();
+        let Some(record_count) = usize::try_from(i64::MAX)
+            .ok()
+            .and_then(|max| max.checked_add(1))
+        else {
+            return;
+        };
+        assert!(ledger
+            .register_file_batch("B1", "SHOPEE", "orders.csv", b"sample", record_count)
+            .is_err());
+    }
+
+    #[test]
     fn test_quarantine_logging() {
         let ledger = IdempotencyLedger::in_memory().unwrap();
         ledger
@@ -600,6 +769,31 @@ mod tests {
         let items = ledger.get_quarantine_items(Some("B1")).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].error_code, "ERR_BAD_SYNTAX");
+    }
+
+    #[test]
+    fn test_negative_persisted_line_numbers_are_rejected() {
+        let ledger = IdempotencyLedger::in_memory().unwrap();
+        {
+            let conn = ledger.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO quarantine_log
+                 (batch_id, filename, line_number, raw_value, error_code, error_reason, quarantined_at)
+                 VALUES ('B1', 'test.csv', -1, '', 'ERR', 'invalid', 'now')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO validation_findings
+                 (batch_id, rule_code, severity, filename, line_number, key_value, reason, created_at)
+                 VALUES ('B1', 'RULE', 'ERROR', 'test.csv', -1, '', 'invalid', 'now')",
+                [],
+            )
+            .unwrap();
+        }
+
+        assert!(ledger.get_quarantine_items(Some("B1")).is_err());
+        assert!(ledger.get_findings(Some("B1")).is_err());
     }
 
     #[test]

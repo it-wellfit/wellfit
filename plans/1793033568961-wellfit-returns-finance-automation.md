@@ -1,5 +1,7 @@
 # Plan: 輔翼銷貨退貨單 + 退貨源分析 + 財務自動化 (wellfit_returns)
 
+> **Disposition (2026-11-02): Proposal only — not approved for implementation.** No accountable business/finance owner or source-file contract is recorded. Confirm return-reason taxonomy, accounting treatment, authorization boundaries, and the actual FlapsErp export format with their owners before treating any decision or acceptance criterion below as binding.
+
 ## Goal
 建立 Wellfit Rust 工作區新增 `wellfit_returns` Crate，自動化處理「輔翼銷貨退貨單」，並透過 FlapsErp Electron 桌面客戶端匯入退貨單資料，分析退貨源（退貨原因歸類），將會計分錄寫入 SQLite Idempotency Ledger 供財務對账，並提供快速智能對账功能。整體遵循現有 Wellfit `wellfit_shopee` / `wellfit_reports` 架構模式。
 
@@ -9,7 +11,7 @@
 - 現有模式：欄位契約以名稱解析（無序位退讓）、金額全程以整數分 (`i64`) 禁止浮點、SQLite IdempotencyLedger 幂等去重、Release Gate 狀態機（DraftGenerated→VerifiedPass/Quarantined→AuthorizedDispatch→Completed/Failed/DispatchUncertain）、CLI 子命令、隔離列保留完整原值、所有規則必須有來源（不可推測）。
 - Shared Standards: `#![forbid(unsafe_code)]`、clippy 零警告、public API 必須有文件註解、貨幣欄位用整數、依賴版本鎖定。
 
-## Decisions
+## Proposed decisions (owner approval required)
 1. **新增 Crate `wellfit_returns`** 在 `crates/wellfit_returns/`，依賴 `wellfit_core`，由 `wellfit_cli` 組裝，新增 CLI 子命令 `returns`。
 2. **資料來源**：FlapsErp Electron 桌面客戶端匯出的銷貨退貨單 CSV（以檔案投放方式攝取，不臆設 SFTP/API；端點與認證標記為 pending-counterparty，與 MTRIX G-08 一致）。
 3. **財務目標**：會計分錄（貸項通知單、應收帳款沖銷、銷貨收入退回、庫存退回、銷貨成本調整）以整數分寫入 `wellfit_core::ledger::IdempotencyLedger`（SQLite），供財務系統匯入對账；不寫入外部會計軟體 API。

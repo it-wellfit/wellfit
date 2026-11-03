@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SiPolicy xmlns="urn:schemas-microsoft-com:sipolicy">
+  <VersionEx>1.0.0.0</VersionEx>
+  <PolicyTypeID>{A244370E-44C9-4C06-B551-F6016E563076}</PolicyTypeID>
+  <PlatformID>{2E07F7E4-194C-4D20-B7C9-6F44A6C5A38A}</PlatformID>
+  <Rules>
+    <Rule>
+      <Option>Enabled:UMCI</Option>
+    </Rule>
+    <Rule>
+      <Option>Enabled:Boot Menu Protection</Option>
+    </Rule>
+  </Rules>
+  <FileRules>
+    <Allow ID="ID_ALLOW_WELLFIT" FriendlyName="Wellfit Executable" FileName="wellfit*.exe" />
+    <Allow ID="ID_ALLOW_CARGO" FriendlyName="Cargo Build" FileName="cargo.exe" />
+    <Allow ID="ID_ALLOW_RUSTC" FriendlyName="Rust Compiler" FileName="rustc.exe" />
+  </FileRules>
+  <Signers />
+  <SigningScenarios>
+    <SigningScenario Value="131" ID="ID_SIGNINGSCENARIO_UMCI" FriendlyName="User Mode Code Integrity">
+      <ProductSigners>
+        <FileRulesRef>
+          <FileRuleRef RuleID="ID_ALLOW_WELLFIT" />
+          <FileRuleRef RuleID="ID_ALLOW_CARGO" />
+          <FileRuleRef RuleID="ID_ALLOW_RUSTC" />
+        </FileRulesRef>
+      </ProductSigners>
+    </SigningScenario>
+  </SigningScenarios>
+</SiPolicy>

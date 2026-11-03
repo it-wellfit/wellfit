@@ -1,7 +1,9 @@
 # Wellfit 企業級產品 — 完整生命週期執行計畫
 
 > 計畫編號：KNB-WELL-LIFE-002｜版本：v2.0｜日期：2026-10-25
-> 狀態：實作準備級
+> 狀態：Historical proposal — not execution-ready (reviewed 2026-11-02)
+
+> 此生命週期計畫與其他 Wellfit completion/lifecycle 計畫重疊；其中 crate 數、測試與合規結果是歷史宣稱。請先依 `../PLAN.md` 重建目前 backlog，不要照舊清單重做。
 
 ## 1. 專案現況摘要
 

@@ -1,5 +1,7 @@
 # Wellfit BankPay 文件體系 — 入口與導覽
 
+> **狀態提醒（2026-11-02）：**依本機 E.Sun V2.8 技術 PDF，協定採 API-first；JSON 為預設載荷，固定長度檔案僅限規格指定交易型態。`docs/bankpay/` 是本專案主要決策與介面文件組。`docs/esun-bank-flaps-erp-integration/` 為保留的次要歷史摘要，其中實作完成及 file-first 宣稱未驗證、不可當作權威規格或交付證據。沙箱／正式帳戶與端對端銀行驗收仍受阻。
+
 **文件編號**：WFLT-DOC-001  
 **版本**：1.0  
 **狀態**：Draft  
@@ -36,7 +38,7 @@
 
 ### 已存在的 BankPay 領域文件（`Wellfit/docs/bankpay/`）
 
-這 8 份文件由 BankPay 領域專用，由領域專家維護：
+以下 8 份文件構成 BankPay 目前的主要工作文件組；各檔案仍須依各自狀態與證據限制使用，均不取代原始銀行規格：
 
 | 檔案 | 目的 | 主要讀者 |
 |------|------|---------|
@@ -64,6 +66,8 @@
 | [`MAINTENANCE_EVOLUTION.md`](./MAINTENANCE_EVOLUTION.md) | 擴充、修改、重構、退役指南 | 維護工程師 |
 | [`TRACEABILITY_MATRIX.md`](./TRACEABILITY_MATRIX.md) | 需求→設計→實作→測試→驗收追溯 | 架構、QA、管理 |
 | [`QUALITY_REVIEW_REPORT.md`](./QUALITY_REVIEW_REPORT.md) | 反向審查結果、已修正缺陷、未決風險 | 審查者、管理 |
+| [`SYNTHETIC_CAPACITY_BASELINE.md`](./SYNTHETIC_CAPACITY_BASELINE.md) | 四流程合成工程量測、可重現方式、資源限制與驗收門檻 | 開發、QA、維運 |
+| [`KILO_429_DIAGNOSTICS.md`](./KILO_429_DIAGNOSTICS.md) | Kilo 429 官方來源與安全診斷流程；Wellfit 管線隔離界線 | 開發、資安、維運 |
 
 ---
 

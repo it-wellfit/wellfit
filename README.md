@@ -11,7 +11,7 @@
 
 ## 1. 這是什麼
 
-Wellfit 是一個 **5-crate Rust 工作區**，把大前實業（Dachen Industrial）輔翼 ERP 與三個外部產品之間的資料往來
+Wellfit 是一個 **7-crate Rust 工作區**，把大前實業（Dachen Industrial）輔翼 ERP 與外部產品之間的資料往來
 變成可驗證、可追溯、可重送的管線：
 
 | 產品 | 資料流 | 核心不變量 |
@@ -20,7 +20,7 @@ Wellfit 是一個 **5-crate Rust 工作區**，把大前實業（Dachen Industri
 | **Product 2 — 輔翼 ERP 報表** | 庫存報表 → 結構化解析 → 發布閘門 | 庫存恆等式 `期末 ≡ 期初 + 進貨 − 銷貨 + 調整` |
 | **Product 3 — 哈瓦士 MTRIX** | 對接方五檔 CSV → 驗證／修復 → 下游 BI | 56 欄逐欄帶出處、15 條驗證規則、12 條編號化修復規則 |
 
-發行物是**單一原生二進位** `wellfit.exe`（`wellfit_cli`），無前端、無 JavaScript、無外部 DLL 依賴。
+工作區包含 `wellfit.exe`（`wellfit_cli`）與獨立的 `wellfit_sync.exe`。Sync 目前只有設備探索與狀態骨架，資料傳輸尚未實作。無前端、無 JavaScript。
 
 ## 2. Crate 地圖
 
@@ -30,7 +30,9 @@ Wellfit 是一個 **5-crate Rust 工作區**，把大前實業（Dachen Industri
 | `wellfit_shopee` | [`crates/wellfit_shopee/`](crates/wellfit_shopee/) | 蝦皮進貨訂單引擎：**8 欄名稱解析契約**（`Shopee inbound order export`）、EX-06 金額守恆、重複訂單去重、ERP 匯入 CSV 產生 |
 | `wellfit_reports` | [`crates/wellfit_reports/`](crates/wellfit_reports/) | 輔翼 ERP 庫存報表解析（零 OCR）、**8 欄名稱解析契約**（`Fuyi ERP inventory report`）、庫存恆等式、異常列隔離、發布閘門 |
 | `wellfit_mtrix` | [`crates/wellfit_mtrix/`](crates/wellfit_mtrix/) | MTRIX 五檔（ALTHCI／ALTHES／ALTHFV／ALTHPD／ALTHVD）**56 欄契約**（`spec.rs`）、**VR-01..VR-14** 驗證規則（`validators.rs`）、**ANOM-01..ANOM-12** 修復規則（`repairs.rs`）、跨檔參照與幣別分組彙總 |
-| `wellfit_cli` | [`crates/wellfit_cli/`](crates/wellfit_cli/) | `wellfit.exe` 進入點，六個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec` |
+| `wellfit_bankpay` | [`crates/wellfit_bankpay/`](crates/wellfit_bankpay/) | E.Sun BankPay 媒體匯出、回覆匯入及 API 查詢 |
+| `wellfit_sync` | [`crates/wellfit_sync/`](crates/wellfit_sync/) | 設備探索、同步狀態及 daemon 骨架；資料傳輸尚未實作 |
+| `wellfit_cli` | [`crates/wellfit_cli/`](crates/wellfit_cli/) | `wellfit.exe` 進入點，九個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec`／`access-control`／`jit`／`bankpay` |
 
 > **重要更正**：舊版文件提到的 `contracts/federation/` **目錄不存在**。
 > 聯邦契約是以 Rust 模組實作，位置為 `crates/wellfit_core/src/federation.rs`，對外介面為 `wellfit_core::federation`。

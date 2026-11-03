@@ -9,10 +9,11 @@
 //! Money is integer cents from the raw export to the ERP import CSV: no `f64`
 //! ever touches an amount.
 
+use csv::{ReaderBuilder, StringRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
-use wellfit_core::contract::{split_header, ColumnContract, ColumnMap};
+use wellfit_core::contract::{ColumnContract, ColumnMap};
 use wellfit_core::ledger::IdempotencyLedger;
 use wellfit_core::mdm::MdmHub;
 use wellfit_core::release_gate::ReleaseGate;
@@ -59,8 +60,10 @@ pub struct ShopeeOrder {
 impl ShopeeOrder {
     /// Rule EX-06: sum(line_amount) == order_total
     pub fn verify_line_sum(&self) -> bool {
-        let sum: i64 = self.items.iter().map(|it| it.line_amount_cents).sum();
-        sum == self.order_total_cents
+        self.items
+            .iter()
+            .try_fold(0i64, |sum, item| sum.checked_add(item.line_amount_cents))
+            .is_some_and(|sum| sum == self.order_total_cents)
     }
 }
 
@@ -110,19 +113,37 @@ fn parse_money_cents(raw: &str) -> Option<i64> {
     if s.is_empty() {
         return None;
     }
-    if let Some((units, fraction)) = s.split_once('.') {
-        let units: i64 = units.trim().parse().ok()?;
-        let fraction = fraction.trim();
-        let cents = match fraction.len() {
-            0 => 0,
-            1 => fraction.parse::<i64>().ok()?.checked_mul(10)?,
-            2 => fraction.parse::<i64>().ok()?,
-            _ => fraction.get(..2)?.parse::<i64>().ok()?,
-        };
-        units.checked_mul(100)?.checked_add(cents)
-    } else {
-        s.parse::<i64>().ok()?.checked_mul(100)
+    let (negative, unsigned) = match s.as_bytes().first() {
+        Some(b'-') => (true, &s[1..]),
+        Some(b'+') => (false, &s[1..]),
+        _ => (false, s),
+    };
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    let digits_only = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    if (!whole.is_empty() && !digits_only(whole))
+        || (!fraction.is_empty() && !digits_only(fraction))
+        || (whole.is_empty() && fraction.is_empty())
+        || fraction.len() > 2
+    {
+        return None;
     }
+    let whole = if whole.is_empty() {
+        0
+    } else {
+        whole.parse::<i128>().ok()?
+    };
+    let mut fraction = fraction.to_string();
+    while fraction.len() < 2 {
+        fraction.push('0');
+    }
+    let cents = if fraction.is_empty() {
+        0
+    } else {
+        fraction.parse::<i128>().ok()?
+    };
+    let magnitude = whole.checked_mul(100)?.checked_add(cents)?;
+    let signed = if negative { -magnitude } else { magnitude };
+    i64::try_from(signed).ok()
 }
 
 /// Format integer cents as a decimal amount with exactly two fraction digits.
@@ -189,16 +210,26 @@ impl ShopeeInboundEngine {
         let mut valid_orders = Vec::new();
         let mut errors = Vec::new();
 
-        // 1. Parse lines
-        let records: Vec<(usize, &str)> = wellfit_core::text::split_records(raw_csv_content);
-        if records.is_empty() {
+        let csv_content = raw_csv_content
+            .strip_prefix('\u{feff}')
+            .unwrap_or(raw_csv_content);
+        wellfit_core::text::validate_delimited_csv(csv_content, b',')?;
+        let mut reader = ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(csv_content.as_bytes());
+        let mut header = StringRecord::new();
+        let has_header = reader
+            .read_record(&mut header)
+            .map_err(|error| format!("Invalid Shopee CSV header: {error}"))?;
+        if !has_header {
             return Ok((valid_orders, errors));
         }
 
         // 2. Resolve the column contract. A violation fails the whole file:
         //    the batch is not registered, so the identifier stays available
         //    for a corrected re-export.
-        let columns = match resolve_columns(records[0].1) {
+        let columns = match resolve_columns(&header) {
             Ok(columns) => columns,
             Err(e) => {
                 let mut gate = self.release_gate.lock().unwrap();
@@ -248,19 +279,31 @@ impl ShopeeInboundEngine {
 
         let mut orders_map: HashMap<String, OrderAccumulator> = HashMap::new();
 
-        for (row_line, line) in records.iter().skip(1) {
-            let row_line = *row_line;
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
+        for result in reader.records() {
+            let record = result.map_err(|error| {
+                let line = error
+                    .position()
+                    .map(|position| position.line().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                format!("Invalid Shopee CSV near line {line}: {error}")
+            })?;
+            let row_line = record
+                .position()
+                .map(|position| usize::try_from(position.line()))
+                .transpose()
+                .map_err(|error| format!("Invalid Shopee CSV line number: {error}"))?
+                .ok_or_else(|| "Shopee CSV record is missing its source position".to_string())?;
+            if record.iter().all(|field| field.trim().is_empty()) {
                 continue;
             }
 
-            let cols: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
+            let serialized_record = || wellfit_core::text::serialize_csv_record(&record, b',');
+            let cols: Vec<&str> = record.iter().map(str::trim).collect();
             if cols.len() < column_count {
                 self.quarantine(
                     batch_id,
                     row_line,
-                    line,
+                    &serialized_record()?,
                     "ERR_INSUFFICIENT_COLUMNS",
                     format!(
                         "Row carries {} column(s); the header declares {}",
@@ -268,7 +311,7 @@ impl ShopeeInboundEngine {
                         column_count
                     ),
                     &mut errors,
-                );
+                )?;
                 continue;
             }
 
@@ -277,11 +320,11 @@ impl ShopeeInboundEngine {
                 self.quarantine(
                     batch_id,
                     row_line,
-                    line,
+                    &serialized_record()?,
                     "ERR_MISSING_ORDER_NO",
                     "Empty ORDER_NO in row".to_string(),
                     &mut errors,
-                );
+                )?;
                 continue;
             }
 
@@ -291,11 +334,11 @@ impl ShopeeInboundEngine {
                     self.quarantine(
                         batch_id,
                         row_line,
-                        line,
+                        &serialized_record()?,
                         "ERR_MONEY_FORMAT",
                         format!("Invalid ORDER_TOTAL: '{}'", cols[idx_total]),
                         &mut errors,
-                    );
+                    )?;
                     continue;
                 }
             };
@@ -320,11 +363,11 @@ impl ShopeeInboundEngine {
                     self.quarantine(
                         batch_id,
                         row_line,
-                        line,
+                        &serialized_record()?,
                         "ERR_UNKNOWN_SKU",
                         format!("SKU '{seller_sku}' not found in canonical MDM catalog"),
                         &mut errors,
-                    );
+                    )?;
                     continue;
                 }
             };
@@ -335,11 +378,11 @@ impl ShopeeInboundEngine {
                     self.quarantine(
                         batch_id,
                         row_line,
-                        line,
+                        &serialized_record()?,
                         "ERR_QTY_FORMAT",
                         format!("Invalid QTY '{}': {e}", cols[idx_qty]),
                         &mut errors,
-                    );
+                    )?;
                     continue;
                 }
             };
@@ -350,11 +393,11 @@ impl ShopeeInboundEngine {
                     self.quarantine(
                         batch_id,
                         row_line,
-                        line,
+                        &serialized_record()?,
                         "ERR_MONEY_FORMAT",
                         format!("Invalid UNIT_PRICE: '{}'", cols[idx_price]),
                         &mut errors,
-                    );
+                    )?;
                     continue;
                 }
             };
@@ -365,11 +408,11 @@ impl ShopeeInboundEngine {
                     self.quarantine(
                         batch_id,
                         row_line,
-                        line,
+                        &serialized_record()?,
                         "ERR_MONEY_FORMAT",
                         format!("Invalid LINE_AMOUNT: '{}'", cols[idx_line_amt]),
                         &mut errors,
-                    );
+                    )?;
                     continue;
                 }
             };
@@ -388,11 +431,13 @@ impl ShopeeInboundEngine {
         }
 
         // 4. Assemble and verify each order
+        let mut lock_candidates = Vec::new();
         for (order_no, acc) in orders_map {
             if acc.items.is_empty() {
                 continue; // Defective items already quarantined
             }
 
+            let raw_line = acc.raw_line;
             let order = ShopeeOrder {
                 order_no: order_no.clone(),
                 customer_ref: acc.customer_ref,
@@ -415,29 +460,37 @@ impl ShopeeInboundEngine {
                     "ERR_SUM_MISMATCH_EX06",
                     reason,
                     &mut errors,
-                );
+                )?;
                 continue;
             }
 
-            // Idempotency lock check
-            let locked = self
-                .ledger
-                .check_and_lock_order(&order_no, batch_id, order.order_total_cents)
-                .map_err(|e| format!("Ledger lock error: {e}"))?;
+            lock_candidates.push((order, raw_line));
+        }
 
+        let lock_results = self
+            .ledger
+            .check_and_lock_order_refs(
+                batch_id,
+                lock_candidates
+                    .iter()
+                    .map(|(order, _)| (order.order_no.as_str(), order.order_total_cents)),
+            )
+            .map_err(|e| format!("Ledger lock error: {e}"))?;
+
+        for ((order, raw_line), locked) in lock_candidates.into_iter().zip(lock_results) {
             if !locked {
+                let order_no = &order.order_no;
                 let reason = format!("Order {} already exists in ERP ledger", order_no);
                 self.quarantine(
                     batch_id,
-                    acc.raw_line,
-                    &order_no,
+                    raw_line,
+                    order_no,
                     "ERR_DUPLICATE_ORDER",
                     reason,
                     &mut errors,
-                );
+                )?;
                 continue;
             }
-
             valid_orders.push(order);
         }
 
@@ -445,7 +498,9 @@ impl ShopeeInboundEngine {
         if !is_clean {
             // The file was defective, so the batch claim is released: a
             // corrected re-export under the same batch identifier is accepted.
-            let _ = self.ledger.release_file_batch(batch_id);
+            self.ledger
+                .release_file_batch(batch_id)
+                .map_err(|e| format!("Database error releasing Shopee batch: {e}"))?;
         }
         let mut gate = self.release_gate.lock().unwrap();
         gate.verify_payload(is_clean, &format!("{} order errors found", errors.len()));
@@ -457,28 +512,44 @@ impl ShopeeInboundEngine {
     ///
     /// Amounts are written as decimal text derived from integer cents; the
     /// value never passes through a float.
-    pub fn generate_fuyi_erp_import_csv(&self, orders: &[ShopeeOrder]) -> String {
-        let mut out = String::from(
-            "ORDER_NO,CUSTOMER_CODE,ORDER_DATE,ITEM_NO,BARCODE_EAN13,QTY,UNIT_PRICE,LINE_TOTAL\n",
-        );
+    pub fn generate_fuyi_erp_import_csv(&self, orders: &[ShopeeOrder]) -> Result<String, String> {
+        let mut writer = csv::WriterBuilder::new().from_writer(Vec::new());
+        writer
+            .write_record([
+                "ORDER_NO",
+                "CUSTOMER_CODE",
+                "ORDER_DATE",
+                "ITEM_NO",
+                "BARCODE_EAN13",
+                "QTY",
+                "UNIT_PRICE",
+                "LINE_TOTAL",
+            ])
+            .map_err(|error| format!("cannot write ERP import CSV header: {error}"))?;
         for o in orders {
             for it in &o.items {
                 let unit_price = format_cents(it.unit_price_cents);
                 let line_total = format_cents(it.line_amount_cents);
-                out.push_str(&format!(
-                    "{},{},{},{},{},{},{},{}\n",
-                    o.order_no,
-                    o.erp_customer_code,
-                    o.order_datetime,
-                    it.erp_item_no,
-                    it.ean13,
-                    it.qty,
-                    unit_price,
-                    line_total
-                ));
+                let qty = it.qty.to_string();
+                writer
+                    .write_record([
+                        o.order_no.as_str(),
+                        o.erp_customer_code.as_str(),
+                        o.order_datetime.as_str(),
+                        it.erp_item_no.as_str(),
+                        it.ean13.as_str(),
+                        &qty,
+                        &unit_price,
+                        &line_total,
+                    ])
+                    .map_err(|error| format!("cannot write ERP import CSV row: {error}"))?;
             }
         }
-        out
+        let bytes = writer
+            .into_inner()
+            .map_err(|error| format!("cannot finish ERP import CSV: {}", error.error()))?;
+        String::from_utf8(bytes)
+            .map_err(|error| format!("ERP import CSV is not valid UTF-8: {error}"))
     }
 
     /// Isolate a row: write it to the audit ledger and collect the error.
@@ -490,27 +561,29 @@ impl ShopeeInboundEngine {
         code: &str,
         reason: String,
         errors: &mut Vec<ShopeeRowError>,
-    ) {
-        let _ = self.ledger.log_quarantine(
-            batch_id,
-            SHOPEE_SOURCE_FILE,
-            line_number,
-            raw_value,
-            code,
-            &reason,
-        );
+    ) -> Result<(), String> {
+        self.ledger
+            .log_quarantine(
+                batch_id,
+                SHOPEE_SOURCE_FILE,
+                line_number,
+                raw_value,
+                code,
+                &reason,
+            )
+            .map_err(|e| format!("Database error recording Shopee quarantine: {e}"))?;
         errors.push(ShopeeRowError {
             line: line_number,
             code: code.to_string(),
             reason,
         });
+        Ok(())
     }
 }
 
 /// Resolve the column contract against a header line.
-fn resolve_columns(header_line: &str) -> Result<ColumnMap, String> {
-    let header: Vec<String> = split_header(header_line, ',');
-    let names: Vec<&str> = header.iter().map(String::as_str).collect();
+fn resolve_columns(header: &StringRecord) -> Result<ColumnMap, String> {
+    let names: Vec<&str> = header.iter().collect();
     shopee_order_contract()
         .resolve(&names)
         .map_err(|e| format!("Shopee column contract violation: {e}"))
@@ -548,11 +621,55 @@ mod tests {
         assert_eq!(valid[0].erp_customer_code, "995C");
         assert_eq!(valid[0].items[0].ean13, "7898656600087");
 
-        let fuyi_csv = engine.generate_fuyi_erp_import_csv(&valid);
+        let fuyi_csv = engine.generate_fuyi_erp_import_csv(&valid).unwrap();
         assert!(fuyi_csv.contains("2610200001"));
         assert!(fuyi_csv.contains("995C"));
         assert!(fuyi_csv.contains("7898656600087"));
         assert_eq!(gate.lock().unwrap().state, ReleaseState::VerifiedPass);
+    }
+
+    #[test]
+    fn test_csv_quoted_fields_and_embedded_newlines_are_parsed_as_one_record() {
+        let (engine, _gate) = engine();
+        let csv = "ORDER_NO,CUSTOMER_REF,ORDER_DATETIME,ORDER_TOTAL,ITEM_NO,QTY,UNIT_PRICE,LINE_AMOUNT\r\n\
+                   2610200101,\"Customer, \"\"A\"\"\",2026-10-20 08:15:00,1000,HAV-TOP-BLK-39,2,500,1000\r\n";
+
+        let (valid, errors) = engine.process_raw_orders(csv, "BATCH-SHP-CSV-001").unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(valid.len(), 1);
+        assert_eq!(valid[0].customer_ref, "Customer, \"A\"");
+    }
+
+    #[test]
+    fn test_csv_with_bom_and_bare_carriage_return_records_is_parsed() {
+        let (engine, _gate) = engine();
+        let csv = "\u{feff}ORDER_NO,CUSTOMER_REF,ORDER_DATETIME,ORDER_TOTAL,ITEM_NO,QTY,UNIT_PRICE,LINE_AMOUNT\r\
+                   2610200103,CUST-A,2026-10-20 08:15:00,1000,HAV-TOP-BLK-39,2,500,1000\r";
+
+        let (valid, errors) = engine.process_raw_orders(csv, "BATCH-SHP-CSV-003").unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(valid.len(), 1);
+        assert_eq!(valid[0].order_no, "2610200103");
+    }
+
+    #[test]
+    fn test_malformed_csv_is_rejected_before_claiming_the_batch() {
+        let (engine, _gate) = engine();
+        let malformed =
+            "ORDER_NO,CUSTOMER_REF,ORDER_DATETIME,ORDER_TOTAL,ITEM_NO,QTY,UNIT_PRICE,LINE_AMOUNT\n\
+                         2610200102,CUST-A,2026-10-20 08:15:00,1000,HAV-TOP-BLK-39,2,500,\"1000";
+        assert!(engine
+            .process_raw_orders(malformed, "BATCH-SHP-CSV-002")
+            .is_err());
+
+        let corrected =
+            "ORDER_NO,CUSTOMER_REF,ORDER_DATETIME,ORDER_TOTAL,ITEM_NO,QTY,UNIT_PRICE,LINE_AMOUNT\n\
+                         2610200102,CUST-A,2026-10-20 08:15:00,1000,HAV-TOP-BLK-39,2,500,1000\n";
+        let (valid, errors) = engine
+            .process_raw_orders(corrected, "BATCH-SHP-CSV-002")
+            .unwrap();
+        assert_eq!(valid.len(), 1);
+        assert!(errors.is_empty());
     }
 
     #[test]
@@ -738,7 +855,9 @@ mod tests {
             }],
         };
 
-        let csv = engine.generate_fuyi_erp_import_csv(std::slice::from_ref(&order));
+        let csv = engine
+            .generate_fuyi_erp_import_csv(std::slice::from_ref(&order))
+            .unwrap();
         let row = wellfit_core::text::split_lines(&csv)
             .get(1)
             .copied()
@@ -762,6 +881,32 @@ mod tests {
     }
 
     #[test]
+    fn test_erp_import_csv_escapes_fields_using_csv_rules() {
+        let (engine, _gate) = engine();
+        let order = ShopeeOrder {
+            order_no: "2610200012".to_string(),
+            customer_ref: "CUST-H".to_string(),
+            erp_customer_code: "995C".to_string(),
+            order_datetime: "2026-10-20, 08:45:00".to_string(),
+            order_total_cents: 120000,
+            items: vec![ShopeeOrderItem {
+                item_no: "HAV-TOP-BLK-39".to_string(),
+                seller_sku: "HAV-TOP-BLK-39".to_string(),
+                erp_item_no: "8,ALT".to_string(),
+                ean13: "7898656600087".to_string(),
+                qty: 2,
+                unit_price_cents: 600,
+                line_amount_cents: 120000,
+            }],
+        };
+        let csv = engine.generate_fuyi_erp_import_csv(&[order]).unwrap();
+        let mut reader = ReaderBuilder::new().from_reader(csv.as_bytes());
+        let row = reader.records().next().unwrap().unwrap();
+        assert_eq!(row.get(2), Some("2026-10-20, 08:45:00"));
+        assert_eq!(row.get(3), Some("8,ALT"));
+    }
+
+    #[test]
     fn test_cents_formatting_is_exact() {
         assert_eq!(format_cents(0), "0.00");
         assert_eq!(format_cents(6), "0.06");
@@ -772,12 +917,48 @@ mod tests {
     }
 
     #[test]
+    fn test_order_line_sum_overflow_is_not_accepted() {
+        let order = ShopeeOrder {
+            order_no: "OVERFLOW".to_string(),
+            customer_ref: String::new(),
+            erp_customer_code: String::new(),
+            order_datetime: String::new(),
+            order_total_cents: 0,
+            items: vec![
+                ShopeeOrderItem {
+                    item_no: String::new(),
+                    seller_sku: String::new(),
+                    erp_item_no: String::new(),
+                    ean13: String::new(),
+                    qty: 1,
+                    unit_price_cents: 0,
+                    line_amount_cents: i64::MAX,
+                },
+                ShopeeOrderItem {
+                    item_no: String::new(),
+                    seller_sku: String::new(),
+                    erp_item_no: String::new(),
+                    ean13: String::new(),
+                    qty: 1,
+                    unit_price_cents: 0,
+                    line_amount_cents: 1,
+                },
+            ],
+        };
+        assert!(!order.verify_line_sum());
+    }
+
+    #[test]
     fn test_money_parsing_is_integer_only() {
         assert_eq!(parse_money_cents("1200"), Some(120000));
         assert_eq!(parse_money_cents("12.00"), Some(1200));
         assert_eq!(parse_money_cents("12.5"), Some(1250));
-        assert_eq!(parse_money_cents("12.345"), Some(1234));
+        assert_eq!(parse_money_cents("-12.5"), Some(-1250));
+        assert_eq!(parse_money_cents("-0.25"), Some(-25));
+        assert_eq!(parse_money_cents("12.345"), None);
         assert_eq!(parse_money_cents(""), None);
         assert_eq!(parse_money_cents("abc"), None);
+        assert_eq!(parse_money_cents("1-2"), None);
+        assert_eq!(parse_money_cents("92233720368547759"), None);
     }
 }

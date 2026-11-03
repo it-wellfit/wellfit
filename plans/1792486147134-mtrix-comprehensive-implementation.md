@@ -2,8 +2,9 @@
 
 > Plan ID: 1792486147134-mtrix-comprehensive-implementation  
 > 建立日期: 2026-10-24  
-> 狀態: Implementation-Ready  
-> 範圍: `哈瓦士串接專案`（規格/樣本）+ `Dev\Wellfit`（5-crate Rust 工作區）
+> 狀態: Historical proposal — not execution-ready (reviewed 2026-11-02)
+
+> 範圍: 原始草案記載 `Dev\Wellfit` 為 5-crate workspace；現有 manifest 已列 7 crates。測試基線與待辦未重新驗證，請先讀 `../PLAN.md` 與 `../docs/project/CURRENT_STATE.md`。
 
 ---
 

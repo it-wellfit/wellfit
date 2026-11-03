@@ -2,8 +2,9 @@
 
 > Plan ID: 1792486147134-mtrix-full-completion-v2  
 > 建立日期: 2026-10-25  
-> 狀態: Implementation-Ready  
-> 範圍: `哈瓦士串接專案` + `Dev\Wellfit` + `Knowledge`
+> 狀態: Historical proposal — not execution-ready (reviewed 2026-11-02)
+
+> 範圍: 原始草案記載 5-crate workspace；現有 manifest 已列 7 crates。Knowledge 路徑、測試基線與待辦未重新驗證，請先讀 `../PLAN.md` 與 `../docs/project/CURRENT_STATE.md`。
 
 ---
 

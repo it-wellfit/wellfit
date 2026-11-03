@@ -6,18 +6,21 @@
 
 ---
 
+> 狀態說明：本文件為架構／交付方案及歷史驗證紀錄，不代表目前部署狀態。Wellfit 有 7 個 Rust crates；`wellfit_sync` 目前沒有資料傳輸，健康檢查通過不等於同步功能或生產 SLA 已驗收。
+
 ## 1. 系統全景圖（Mermaid 網狀圖）
 
 ```mermaid
 graph TD
     %% ===== 核心層 =====
-    subgraph CORE ["Wellfit Rust 工作區 (6 Crates)"]
+    subgraph CORE ["Wellfit Rust 工作區 (7 Crates)"]
         C1[wellfit_core<br/>共享核心]
         C2[wellfit_reports<br/>報表自動化]
         C3[wellfit_shopee<br/>蝦皮進貨]
         C4[wellfit_mtrix<br/>MTRIX 介接引擎]
         C5[wellfit_cli<br/>CLI 進入點]
-        C6[wellfit_sync<br/>多平台同步守護程式]
+        C6[wellfit_sync<br/>設定與探索骨架；無資料傳輸]
+        C7[wellfit_bankpay<br/>BankPay 整合]
     end
 
     %% ===== ISMS 合規層 =====
@@ -119,7 +122,7 @@ wellfit (workspace)
 │   ├── wellfit_shopee
 │   └── wellfit_mtrix
 │
-└── wellfit_sync (多平台同步守護程式)
+└── wellfit_sync (Sync CLI；目前無資料傳輸)
     ├── wellfit_core
     ├── clap (CLI)
     ├── serde + serde_json
@@ -156,7 +159,7 @@ Layer 2: 執行時層
 Layer 3: 服務層
   ├── Windmill Server + Worker (Rust 後端)
   ├── wellfit.exe (MTRIX/Shopee/Reports/Audit/Spec)
-  ├── wellfit_sync.exe (同步守護程式)
+  ├── wellfit_sync.exe (Sync CLI；資料傳輸未實作)
   └── PowerShell 腳本 (normalize/notify/validate)
 
 Layer 4: 整合層
@@ -286,7 +289,7 @@ Layer 6: 治理層
 | wellfit_shopee | 蝦皮進貨訂單 → ERP 匯入 | ShopeeInboundEngine, ShopeeOrder | 13 |
 | wellfit_mtrix | MTRIX 五檔契約、驗證與修復 | MtrixEngine, VrRule, REPAIR_RULES, ValidationReport | 47 |
 | wellfit_cli | CLI 進入點（6 子命令） | Cli, Commands, UiConfig | 12 |
-| wellfit_sync | 多平台同步守護程式（8 命令） | SyncConfig, PeerDevice, health, sync | 0 |
+| wellfit_sync | 設定、健康檢查與 peer 探索 CLI | SyncConfig, PeerDevice；無資料傳輸 | 0 |
 
 ### 5.2 ISMS 合規套件
 
@@ -401,7 +404,9 @@ default_batch = "BATCH-CLI"
 default_db = "data/wellfit_ledger.sqlite"
 ```
 
-### 7.3 sync.toml (同步守護程式配置)
+### 7.3 Sync JSON 設定（現行格式；不是 TOML）
+
+以下設定欄位與預設值來自目前的 JSON 設定型別；retry、併發、頻寬、檢查點等值尚未由傳輸流程使用或經負載測試驗證，不是核准的流量控制政策或 SLA。`tls_enabled` 等欄位也不代表 TLS／資料加密已實作。
 
 ```json
 {
@@ -515,21 +520,21 @@ Phase 0 (環境準備)
 | MTRIX 引擎 | `wellfit.exe mtrix` | 5/5 解析, 25/25 接受 | 5/5 解析, 25/25 接受 | ✔ |
 | 檔名標準化 | `normalize-filename.ps1 -DryRun` | 5 掃描, 0 重命名 | 5 掃描, 0 重命名 | ✔ |
 | 異常通知 | `notify-exception.ps1` | 18 異常 | 18 異常 | ✔ |
-| 同步守護程式 | `wellfit_sync health` | {"status":"ok"} | {"status":"ok"} | ✔ |
+| Sync 健康檢查 | `wellfit_sync health` | `{"status":"ok"}` | `{"status":"ok"}` | 僅證明健康檢查指令可回應，不代表資料同步 |
 | 建置健康檢查 | `build.ps1 -HealthCheck` | 通過 | 通過 | ✔ |
 
 ---
 
 ## 11. 結論
 
-**完整多層展開方案已建立**，涵蓋：
+**本文件描述的多層架構方案與歷史驗證紀錄**涵蓋：
 
-1. **6 個 Rust Crates**：wellfit_core, wellfit_reports, wellfit_shopee, wellfit_mtrix, wellfit_cli, wellfit_sync
+1. **7 個 Rust Crates**：wellfit_core, wellfit_reports, wellfit_shopee, wellfit_mtrix, wellfit_cli, wellfit_sync, wellfit_bankpay
 2. **9 個 PowerShell 工具**：verify-compliance, check-scope-consistency, build-control-trace, collect-evidence, build-access-review-packet, build-workpackage-sheet, build-compliance-xlsx, new-isms-artifact, validate-templates, normalize-filename, notify-exception
 3. **1 個建置入口**：build.ps1 (MSVC + GNU fallback)
 4. **ISMS 合規套件**：10 主文 + 23 範本 + 15 表單 + 9 工具 + 11 值域 + 3 ADR + 93 項控制
 5. **MTRIX 介接規格**：5 檔 × 56 欄 + 15 驗證規則 + 12 修復規則 + 例外通知
 6. **自動化部署**：Windmill (原生二進位) + PostgreSQL + Prometheus/Grafana + Keycloak + Vault
-7. **多平台同步**：wellfit_sync (Windows/Linux/macOS/NAS)
+7. **Sync**：wellfit_sync 設定與設備探索骨架；資料傳輸及跨平台部署尚未實作／驗證
 
-全量驗證：PASS=631 / WARN=0 / FAIL=0，0 FAIL，所有專案項目已勤奮完成並驗證。
+文件中記載的 `PASS=631 / WARN=0 / FAIL=0` 是歷史合規腳本結果，不是所有程式功能、效能或生產部署均通過的證明。容量、長時間運行、背壓、恢復及 Sync SLA 尚未驗收；交付結論需依目前程式碼與可重現證據另行判定。

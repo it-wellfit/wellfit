@@ -73,8 +73,8 @@ fn test_config_save_and_load() {
     config.monitoring.metrics_enabled = true;
     config.monitoring.log_level = "debug".to_string();
 
-    config::save_config(&path, &config);
-    let loaded = config::load_config(&path);
+    config::save_config(&path, &config).unwrap();
+    let loaded = config::load_config(&path).unwrap();
 
     assert_eq!(loaded.device.name, "test-device");
     assert_eq!(loaded.device.id, "dev-001");
@@ -104,12 +104,12 @@ fn test_add_and_list_devices() {
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&devices_path);
 
-    config::add_device(&path, "device-1", "192.168.1.10", 8080);
-    config::add_device(&path, "device-2", "192.168.1.11", 8081);
+    config::add_device(&path, "device-1", "192.168.1.10", 8080).unwrap();
+    config::add_device(&path, "device-2", "192.168.1.11", 8081).unwrap();
 
     assert!(devices_path.exists());
 
-    let device_list = config::load_device_list(&path);
+    let device_list = config::load_device_list(&path).unwrap();
     assert_eq!(device_list.devices.len(), 2);
     assert_eq!(device_list.devices[0].name, "device-1");
     assert_eq!(device_list.devices[0].address, "192.168.1.10");
@@ -120,8 +120,8 @@ fn test_add_and_list_devices() {
     assert_eq!(device_list.devices[1].port, 8081);
     assert!(device_list.devices[1].enabled);
 
-    config::remove_device(&path, "device-1");
-    let device_list = config::load_device_list(&path);
+    config::remove_device(&path, "device-1").unwrap();
+    let device_list = config::load_device_list(&path).unwrap();
     assert_eq!(device_list.devices.len(), 1);
     assert_eq!(device_list.devices[0].name, "device-2");
 
@@ -131,21 +131,47 @@ fn test_add_and_list_devices() {
 
 #[test]
 fn test_config_file_not_found_returns_default() {
-    let path = std::path::Path::new("/nonexistent/path/config.json");
-    let config = config::load_config(path);
+    let path = std::env::temp_dir().join(format!(
+        "wellfit_missing_config_{}_config.json",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let config = config::load_config(&path).unwrap();
     assert_eq!(config.device.name, "");
     assert_eq!(config.sync.sync_interval_seconds, 300);
     assert_eq!(config.sync.max_concurrent_syncs, 4);
 }
 
 #[test]
-fn test_invalid_json_returns_default() {
+fn test_invalid_json_returns_error() {
     let path = std::env::temp_dir().join(format!("test_invalid_json_{}.json", std::process::id()));
     // Ensure clean state
     let _ = std::fs::remove_file(&path);
     // Write invalid JSON
     std::fs::write(&path, "{invalid json").unwrap();
-    let config = config::load_config(&path);
-    assert_eq!(config.device.name, "");
+    let error = config::load_config(&path).unwrap_err();
+    assert!(error.contains("cannot parse config"));
     let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn test_config_save_error_is_returned() {
+    let path = std::env::temp_dir()
+        .join(format!("wellfit_missing_parent_{}", std::process::id()))
+        .join("sync.json");
+    let error = config::save_config(&path, &SyncConfig::default()).unwrap_err();
+    assert!(error.contains("cannot write config"));
+}
+
+#[test]
+fn test_invalid_device_list_is_reported() {
+    let path = std::env::temp_dir().join(format!(
+        "wellfit_invalid_devices_{}_config.json",
+        std::process::id()
+    ));
+    let devices_path = path.with_extension("devices.json");
+    std::fs::write(&devices_path, "{invalid json").unwrap();
+    let error = config::load_device_list(&path).unwrap_err();
+    assert!(error.contains("cannot parse device list"));
+    let _ = std::fs::remove_file(&devices_path);
 }

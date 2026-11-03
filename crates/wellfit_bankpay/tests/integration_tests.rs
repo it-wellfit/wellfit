@@ -2,7 +2,10 @@
 
 //! Integration tests for the wellfit_bankpay crate.
 
+use sha2::{Digest, Sha256};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use wellfit_bankpay::{
     base64_decode_media, base64_encode_media, cents_to_yuan_str, media_file_sha256, BankEncoding,
     BankpayEngine, TwdMediaRecord,
@@ -44,6 +47,7 @@ fn export_vouchers_success() {
         "BATCH-INT-1",
         "2026-11-02",
         BankEncoding::Utf8,
+        None,
         |_| Ok(true),
     );
 
@@ -71,6 +75,7 @@ fn export_vouchers_isolates_bad_rows() {
         "BATCH-INT-2",
         "2026-11-02",
         BankEncoding::Utf8,
+        None,
         |_| Ok(true),
     );
 
@@ -268,6 +273,7 @@ fn http_client_config_tls() {
         client_cert_path: Some("/path/to/cert.pem".to_string()),
         client_key_path: Some("/path/to/key.pem".to_string()),
         ca_cert_path: Some("/path/to/ca.pem".to_string()),
+        pin_server_cert_sha256: vec![],
         timeout_secs: 30,
     };
     let client = wellfit_bankpay::EsunHttpClient::new(config);
@@ -301,6 +307,7 @@ fn end_to_end_export_import_query() {
             "BATCH-E2E",
             "2026-11-02",
             BankEncoding::Utf8,
+            None,
             |_| Ok(true),
         )
         .unwrap();
@@ -323,7 +330,161 @@ fn end_to_end_export_import_query() {
 
     let q_tx = query(&mut engine, "tx", "ETRACE-9001").unwrap();
     assert_eq!(q_tx.bank_ref, Some("ETRACE-9001".to_string()));
-
     let q_batch = query(&mut engine, "batch", "BATCH-E2E").unwrap();
     assert_eq!(q_batch.batch_id, Some("BATCH-E2E".to_string()));
+}
+
+#[test]
+#[ignore = "manual synthetic BankPay capacity benchmark; uses only mock transport"]
+fn bankpay_synthetic_mock_capacity_benchmark() {
+    struct TempFiles(Vec<std::path::PathBuf>);
+
+    impl Drop for TempFiles {
+        fn drop(&mut self) {
+            for path in &self.0 {
+                if let Err(error) = std::fs::remove_file(path) {
+                    if error.kind() != std::io::ErrorKind::NotFound {
+                        eprintln!("could not clean benchmark file {}: {error}", path.display());
+                    }
+                }
+            }
+        }
+    }
+
+    let rows = std::env::var("BANKPAY_BENCH_RECORDS")
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("BANKPAY_BENCH_RECORDS must be an integer")
+        })
+        .unwrap_or(250_000);
+    assert!(
+        (1..=1_000_000).contains(&rows),
+        "benchmark rows must be between 1 and 1,000,000"
+    );
+
+    let root = std::env::temp_dir();
+    let stem = format!("wellfit_bankpay_bench_{}_{}", std::process::id(), rows);
+    let input_path = root.join(format!("{stem}.csv"));
+    let batch_id = root.join(format!("{stem}_batch"));
+    let media_path = std::path::PathBuf::from(format!("{}.bankpay.media", batch_id.display()));
+    let _cleanup = TempFiles(vec![input_path.clone(), media_path]);
+
+    let file = std::fs::File::create(&input_path).expect("create synthetic input");
+    let mut writer = std::io::BufWriter::new(file);
+    let header = "VOUCHER_NO,VENDOR_CODE,AMOUNT,BANK_ACCOUNT,DUE_DATE,REFERENCE\n";
+    writer
+        .write_all(header.as_bytes())
+        .expect("write CSV header");
+    let mut input_hasher = Sha256::new();
+    input_hasher.update(header.as_bytes());
+    for row in 0..rows {
+        let line = format!(
+            "BP-{row:09},V-{row:06},1000.0000,TEST-ACCOUNT,2026-11-03,SYNTHETIC-{row:09}\n"
+        );
+        writer
+            .write_all(line.as_bytes())
+            .expect("write synthetic row");
+        input_hasher.update(line.as_bytes());
+    }
+    writer.flush().expect("flush synthetic input");
+    let input_bytes = std::fs::metadata(&input_path)
+        .expect("stat synthetic input")
+        .len();
+    let input_sha256 = format!("{:x}", input_hasher.finalize());
+
+    let ledger = Arc::new(test_ledger());
+    let gate = Arc::new(Mutex::new(ReleaseGate::default()));
+    let mut engine = BankpayEngine::new(ledger, gate);
+    let mut mock_called = false;
+    let mut mock_payload_bytes = 0usize;
+    let started = Instant::now();
+    let result = engine.export_vouchers(
+        &input_path,
+        &batch_id.to_string_lossy(),
+        "2026-11-02",
+        BankEncoding::Utf8,
+        None,
+        |media| {
+            mock_called = true;
+            mock_payload_bytes = media.len();
+            Ok(true)
+        },
+    );
+    let elapsed = started.elapsed();
+    let result = result.expect("synthetic BankPay export must succeed");
+    assert_eq!(result.vouchers_accepted, rows);
+    assert_eq!(result.vouchers_isolated, 0);
+    assert!(result.dispatched);
+    assert!(!result.api_dispatch_attempted);
+    assert!(mock_called, "mock transport must receive the media payload");
+    assert_eq!(result.file_sha256.len(), 64);
+    assert_eq!(
+        mock_payload_bytes,
+        std::fs::metadata(&result.media_file).unwrap().len() as usize
+    );
+
+    println!(
+        "bankpay_synthetic_capacity rows={rows} input_bytes={input_bytes} input_sha256={input_sha256} elapsed_ms={} rows_per_second={:.2} media_bytes={mock_payload_bytes} media_sha256={} api_dispatch_attempted=false mock_transport_called=true",
+        elapsed.as_millis(),
+        rows as f64 / elapsed.as_secs_f64(),
+        result.file_sha256
+    );
+}
+
+#[test]
+fn cert_pinning_config_defaults_empty() {
+    let config = wellfit_bankpay::EsunHttpClientConfig::default();
+    assert!(
+        config.pin_server_cert_sha256.is_empty(),
+        "Default config must not pin certificates"
+    );
+}
+
+#[test]
+fn cert_pinning_config_accepts_pinned_hash() {
+    let config = wellfit_bankpay::EsunHttpClientConfig {
+        base_url: "https://127.0.0.1:8443".to_string(),
+        client_cert_path: None,
+        client_key_path: None,
+        ca_cert_path: None,
+        pin_server_cert_sha256: vec![
+            "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string(),
+        ],
+        timeout_secs: 30,
+    };
+    assert_eq!(config.pin_server_cert_sha256.len(), 1);
+    // SHA-256 hashes should be 64 hex chars
+    assert_eq!(config.pin_server_cert_sha256[0].len(), 64);
+}
+
+#[test]
+fn mock_security_component_payment_flow() {
+    // QG-04 mitigation: Use mock security component to verify the full
+    // payment lifecycle — create payment, then query status — without
+    // requiring the real E.Sun sandbox certificate (OQ-E3 pending).
+    let client = wellfit_bankpay::EsunHttpClient::new_test_client();
+
+    // Simulate a payment creation response
+    let payment_resp = client.mock_payment_response("IOB20261102001-0001");
+    assert!(payment_resp.is_ok());
+    let resp = payment_resp.unwrap();
+    assert_eq!(resp.rs_status.code, "910000");
+    assert_eq!(resp.rs_status.message, "SUCCESS");
+    assert!(resp.rs_data.is_some());
+    let data = resp.rs_data.unwrap();
+    assert_eq!(data.data_count, "1");
+    assert_eq!(data.tx_record_list.len(), 1);
+    assert_eq!(data.tx_record_list[0].tx_seq, "IOB20261102001-0001");
+
+    // Simulate a status query response
+    let status_resp = client.mock_status_response("ETRACE-9001");
+    assert!(status_resp.is_ok());
+    let sresp = status_resp.unwrap();
+    assert_eq!(sresp.rs_status.code, "910000");
+    assert_eq!(sresp.rs_status.message, "SUCCESS");
+    assert!(sresp.rs_data.is_some());
+    let sdata = sresp.rs_data.unwrap();
+    assert_eq!(sdata.bank_ref, "ETRACE-9001");
+    assert_eq!(sdata.tx_status, "0000");
 }

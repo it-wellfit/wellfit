@@ -1,8 +1,8 @@
 # Wellfit 完整產品生命週期計畫 — 從 0 到 Production
 
 > 計畫編號：KNB-WELL-PROD-001｜版本：v1.0｜日期：2026-10-25
-> 狀態：實作準備級
-> 範圍：Wellfit Rust 工作區 (6 crates) + ISMS 合規套件 + MTRIX 介接 + 多平台同步
+> 狀態：歷史交付計畫；部分狀態與驗證資料已過時，不能作為目前生產就緒證明。
+> 範圍：Wellfit Rust 工作區（目前 7 crates）+ ISMS 合規套件 + MTRIX 介接 + Sync CLI（資料傳輸未實作）
 
 ---
 
@@ -12,12 +12,12 @@
 
 | 類別 | 項目 | 狀態 | 驗證結果 |
 |---|---|---|---|
-| Rust Crate | 6 (wellfit_core, wellfit_reports, wellfit_shopee, wellfit_mtrix, wellfit_cli, wellfit_sync) | ✔ 完成 | cargo check/clippy/test 通過 |
+| Rust Crate | 7 (wellfit_core, wellfit_reports, wellfit_shopee, wellfit_mtrix, wellfit_cli, wellfit_sync, wellfit_bankpay) | ✔ 建置／測試 | 最近 workspace run：237 passed、3 ignored；不代表容量或生產 SLA 驗收 |
 | 驗證規則 | VR-01~VR-15 (15 條) | ✔ 完成 | 47 個單元測試通過 |
 | 修復規則 | ANOM-01~ANOM-12 (12 條) | ✔ 完成 | 12 個單元測試通過 |
 | ISMS 合規 | 9 工具 + 23 範本 + 15 表單 + 10 主文 + 93 項控制 | ✔ 完成 | PASS=631/WARN=0/FAIL=0 |
 | UI/UX | ANSI 顏色、Spinner、ProgressBar、Table、Panel | ✔ 完成 | clippy 0 警告 |
-| 多平台同步 | wellfit_sync (8 命令) | ✔ 完成 | 19 個單元測試通過 |
+| Sync | wellfit_sync CLI 與設備探索骨架 | 部分實作；無資料傳輸 | 測試僅驗證現有 CLI／設定／探索行為，不代表同步能力 |
 | PowerShell 工具 | 9 個腳本 | ✔ 完成 | 全部驗證通過 |
 | 文件 | 20+ 份 | ✔ 完成 | 人工審閱 |
 
@@ -82,7 +82,7 @@
 | R-08 | 零浮點金額 | P0 | ✔ 已實作 | scaled.rs 單元測試 |
 | R-09 | 欄位名稱解析 | P0 | ✔ 已實作 | contract.rs 單元測試 |
 | R-10 | 合規驗證 0 FAIL | P0 | ✔ 已實作 | verify-compliance.ps1 |
-| R-11 | 多平台同步守護程式 | P1 | ✔ 已實作 | cargo test |
+| R-11 | 多平台同步守護程式 | P1 | 部分實作：設定、健康檢查及 peer 探索；沒有資料傳輸 | cargo test 不驗證資料同步 |
 | R-12 | Windmill 自動化部署 | P2 | ✔ 已設計 | 設計文件 |
 | R-13 | ISMS 93 項控制 | P0 | ✔ 已實作 | build-control-trace |
 | R-14 | 四維控制狀態 | P0 | ✔ 已實作 | V-05 |
@@ -174,12 +174,12 @@ graph TD
 - [x] normalize-filename.ps1 (檔名標準化)
 - [x] notify-exception.ps1 (異常通知)
 
-### Sprint 5: 多平台同步守護程式（已完成）
-- [x] wellfit_sync crate (8 CLI 命令)
-- [x] SQLite 狀態儲存 + 檢查點
-- [x] 裝置發現 (TCP 連線檢查)
-- [x] 健康檢查端點
-- [x] 平台抽象 (Windows/Linux/macOS)
+### Sprint 5: Sync 基礎骨架（部分實作；非多平台同步交付）
+- [x] wellfit_sync CLI、JSON 設定與健康檢查
+- [x] SQLite 本機狀態表及 peer 可達性探索
+- [ ] 檔案／記錄傳輸、TLS、身份驗證與授權
+- [ ] 增量游標、衝突政策、重試／背壓與故障恢復
+- [ ] Windows/Linux/macOS/NAS 部署與容量驗收
 
 ### Sprint 6: 自動化部署（已完成）
 - [x] Windmill 整合架構文件
@@ -353,7 +353,7 @@ Alpargatas 交付檔案 (5 CSV)
 | 組件 | 類型 | 部署方式 |
 |---|---|---|
 | wellfit.exe | 原生二進位 | 直接執行 |
-| wellfit_sync.exe | 原生二進位 | Windows Service / systemd / launchd |
+| wellfit_sync | CLI 二進位 | 僅已驗證現有 CLI；service mode 與跨平台部署尚未驗證 |
 | Windmill | 原生二進位 | Windows Service / systemd / launchd |
 | PostgreSQL | 原生安裝 | Windows Service / systemd |
 | PowerShell 腳本 | .ps1 | 直接執行 |
@@ -382,15 +382,15 @@ Invoke-WebRequest -Uri "https://github.com/windmill-labs/windmill/releases/lates
 # 6. 安裝 Windows Service
 sc.exe create WindmillServer binPath= "C:\tools\windmill.exe --database-url postgres://windmill:windmill@localhost:5432/windmill --mode server" start= auto
 sc.exe create WindmillWorker binPath= "C:\tools\windmill.exe --database-url postgres://windmill:windmill@localhost:5432/windmill --mode worker" start= auto
-sc.exe create WellfitSync binPath= "C:\tools\wellfit_sync.exe --daemon" start= auto
+# Sync service mode is not implemented; do not install this as a service.
 
 # 7. 啟動服務
 sc.exe start WindmillServer
 sc.exe start WindmillWorker
-sc.exe start WellfitSync
 
 # 8. 驗證
 Invoke-WebRequest -Uri "http://localhost:8000/api/version"
+# Health response only checks the CLI health command; it does not test data transfer.
 wellfit_sync health
 ```
 
@@ -429,8 +429,6 @@ wellfit_sync health
 
 ## 10. 結語
 
-Wellfit 企業級產品已完整開發並驗證。系統包含 6 個 Rust Crate、9 個 PowerShell 工具、20+ 份分析與架構文件，並通過全量驗證（0 FAIL）。
+本文件是交付計畫與歷史驗證紀錄，不構成目前的生產就緒證明。Wellfit 有 7 個 Rust crates；既有測試與靜態檢查通過，不等於完成高流量容量驗收。`wellfit_sync` 尚無資料傳輸功能；部署拓樸、數值業務契約及生產 SLA 仍須各自驗證與核准。
 
-產品已準備好進入生產環境部署。
-
-**全量驗證通過，0 FAIL，所有專案項目已勤奮完成並驗證。可正式交付。**
+不得依本文件中的歷史 PASS 數字推定所有功能已完成或可正式部署。請以當前程式碼、可重現測試輸出、具代表性的容量基準及正式業務契約作為交付依據。

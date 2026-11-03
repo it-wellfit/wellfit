@@ -1,4 +1,4 @@
-﻿#![forbid(unsafe_code)]
+#![forbid(unsafe_code)]
 
 //! BankPay engine: export (ERP -> bank) and import (bank -> ERP) pipelines
 //! for accounts payable vouchers.
@@ -14,14 +14,13 @@ use crate::encoding::{from_utf8, to_utf8, BankEncoding};
 use crate::http::EsunHttpClient;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use wellfit_core::contract::ColumnContract;
 use wellfit_core::ledger::{Finding, FindingSeverity, IdempotencyLedger};
 use wellfit_core::release_gate::ReleaseGate;
 use wellfit_core::scaled::ScaledDecimal;
-use wellfit_core::text::{split_records, MAX_INPUT_BYTES};
+use wellfit_core::text::{read_bytes_capped, split_records, MAX_INPUT_BYTES};
 
 // ---------------------------------------------------------------------------
 // Domain models
@@ -77,6 +76,8 @@ pub struct ExportResult {
     pub vouchers_isolated: usize,
     pub dispatched: bool,
     pub release_state: String,
+    /// Whether the E.Sun API was invoked for this export.
+    pub api_dispatch_attempted: bool,
 }
 
 /// Outcome of an import run.
@@ -87,6 +88,58 @@ pub struct ImportResult {
     pub results_isolated: usize,
     pub matched_vouchers: usize,
     pub unmatched: usize,
+}
+
+/// Configuration for E.Sun BankPay export operations.
+///
+/// Encapsulates the parameters that were previously discarded in the CLI
+/// (`source_system`, `customer_id`, `payer_account`, `payer_id`, `format_type`).
+/// These values are required by E.Sun's `createTwdPaymentInstruction` API
+/// to construct the `RqHeader.sourceSystem`, `RqHeader.customerIxd`, and the
+/// per-transaction `payerAccountNo` / `payerId` fields.
+#[derive(Debug, Clone)]
+pub struct BankpayExportConfig {
+    /// Agreed SourceSystemId for E.Sun API authentication (required).
+    pub source_system: String,
+    /// Enterprise group tax ID, 8-10 digits (required).
+    pub customer_id: String,
+    /// Payer E.Sun account number (required for API dispatch).
+    pub payer_account: String,
+    /// Payer tax ID / unified business ID (required for API dispatch).
+    pub payer_id: String,
+    /// Format type: "1" = file (base64 media), "2" = JSON.
+    pub format_type: String,
+}
+
+impl BankpayExportConfig {
+    /// Create a new export config from validated CLI parameters.
+    pub fn new(
+        source_system: String,
+        customer_id: String,
+        payer_account: String,
+        payer_id: String,
+        format_type: String,
+    ) -> Self {
+        Self {
+            source_system,
+            customer_id,
+            payer_account,
+            payer_id,
+            format_type,
+        }
+    }
+}
+
+impl Default for BankpayExportConfig {
+    fn default() -> Self {
+        Self {
+            source_system: "ERP-BANKPAY".to_string(),
+            customer_id: "00000000".to_string(),
+            payer_account: String::new(),
+            payer_id: String::new(),
+            format_type: "2".to_string(),
+        }
+    }
 }
 
 /// Resolved column indices for a voucher export file.
@@ -507,23 +560,21 @@ impl BankpayEngine {
     /// 4. Register the file batch in the ledger.
     /// 5. Assemble the media file; run `ReleaseGate::verify_payload`.
     /// 6. If valid, `ReleaseGate::dispatch` (caller-supplied transport).
+    ///
+    /// When `export_config` is provided, the assembled media file is also
+    /// submitted to the E.Sun API via `EsunHttpClient::create_twd_payment`
+    /// before the transport closure is invoked. This enables the API-based
+    /// workflow described in QR-01.
     pub fn export_vouchers(
         &mut self,
         source_path: &Path,
         batch_id: &str,
         batch_date: &str,
         encoding: BankEncoding,
+        export_config: Option<BankpayExportConfig>,
         transport: impl FnOnce(&[u8]) -> Result<bool, String>,
     ) -> Result<ExportResult, String> {
-        let bytes = fs::read(source_path)
-            .map_err(|e| format!("cannot read source file {}: {e}", source_path.display()))?;
-        if bytes.len() > MAX_INPUT_BYTES {
-            return Err(format!(
-                "source file {} exceeds {} byte limit",
-                source_path.display(),
-                MAX_INPUT_BYTES
-            ));
-        }
+        let bytes = read_bytes_capped(source_path, MAX_INPUT_BYTES)?;
         let (content, _detected) = to_utf8(&bytes, None);
 
         let source_name = source_path
@@ -594,7 +645,7 @@ impl BankpayEngine {
         let file_sha256 = media_file_sha256(&media_bytes);
 
         let media_path = format!("{batch_id}.bankpay.media");
-        fs::write(&media_path, &media_bytes)
+        wellfit_core::text::write_atomic(std::path::Path::new(&media_path), &media_bytes)
             .map_err(|e| format!("cannot write media file {media_path}: {e}"))?;
 
         // Release gate: two-way door verify, then one-way door dispatch.
@@ -609,6 +660,36 @@ impl BankpayEngine {
         );
 
         let dispatched = if valid {
+            // If an API export config is provided, build and dispatch the TWD
+            // payment request via the E.Sun security component API before
+            // invoking the transport closure. This enables the API-based
+            // workflow described in QR-01.
+            if let Some(ref cfg) = export_config {
+                if let Some(ref client) = self.http_client {
+                    let payment_request = self.build_twd_payment_request(
+                        &accepted,
+                        &cfg.source_system,
+                        &cfg.customer_id,
+                        &cfg.payer_account,
+                        &cfg.payer_id,
+                        &cfg.format_type,
+                    );
+                    match client.create_twd_payment(&cfg.source_system, &payment_request) {
+                        Ok(response) => {
+                            if !response.is_success() {
+                                return Err(format!(
+                                    "E.Sun API rejected export: {} {}",
+                                    response.rs_status.code, response.rs_status.message
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            return Err(format!("E.Sun API dispatch failed: {e}"));
+                        }
+                    }
+                }
+            }
+
             match transport(&media_bytes) {
                 Ok(true) => {
                     self.gate
@@ -645,6 +726,7 @@ impl BankpayEngine {
             vouchers_isolated: isolated.len(),
             dispatched,
             release_state,
+            api_dispatch_attempted: export_config.is_some(),
         })
     }
 
@@ -662,8 +744,7 @@ impl BankpayEngine {
         batch_id: &str,
         _encoding: BankEncoding,
     ) -> Result<ImportResult, String> {
-        let bytes = fs::read(source_path)
-            .map_err(|e| format!("cannot read result file {}: {e}", source_path.display()))?;
+        let bytes = read_bytes_capped(source_path, MAX_INPUT_BYTES)?;
         let (content, _detected) = to_utf8(&bytes, None);
 
         let source_name = source_path
@@ -791,18 +872,28 @@ mod tests {
              AP-002,V002,2500.5000,ACCT-2,2026-11-04,INV-101\n",
         );
         let batch_date = "2026-11-02";
-        let r1 = engine.export_vouchers(&path, "BATCH-1", batch_date, BankEncoding::Utf8, |_| {
-            Ok(true)
-        });
+        let r1 = engine.export_vouchers(
+            &path,
+            "BATCH-1",
+            batch_date,
+            BankEncoding::Utf8,
+            None,
+            |_| Ok(true),
+        );
         assert!(r1.is_ok(), "first export must succeed: {:?}", r1.err());
         let r1 = r1.unwrap();
         assert_eq!(r1.vouchers_accepted, 2);
         assert!(r1.dispatched);
 
         // Re-export same batch id -> duplicate rejected.
-        let r2 = engine.export_vouchers(&path, "BATCH-1", batch_date, BankEncoding::Utf8, |_| {
-            Ok(true)
-        });
+        let r2 = engine.export_vouchers(
+            &path,
+            "BATCH-1",
+            batch_date,
+            BankEncoding::Utf8,
+            None,
+            |_| Ok(true),
+        );
         assert!(r2.is_err(), "duplicate batch must be rejected");
     }
 
@@ -814,10 +905,14 @@ mod tests {
         let path = write_tmp_csv(
             "VOUCHER_NO,VENDOR_CODE,AMOUNT,BANK_ACCOUNT\nAP-001,V001,notanumber,ACCT-1\n",
         );
-        let r =
-            engine.export_vouchers(&path, "BATCH-BAD", "2026-11-02", BankEncoding::Utf8, |_| {
-                Ok(true)
-            });
+        let r = engine.export_vouchers(
+            &path,
+            "BATCH-BAD",
+            "2026-11-02",
+            BankEncoding::Utf8,
+            None,
+            |_| Ok(true),
+        );
         assert!(r.is_ok());
         let r = r.unwrap();
         assert_eq!(r.vouchers_accepted, 0);
@@ -885,6 +980,7 @@ mod tests {
                 batch_id,
                 batch_date,
                 BankEncoding::Utf8,
+                None,
                 |_| Ok(true),
             )
             .unwrap();

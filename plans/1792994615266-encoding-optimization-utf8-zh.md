@@ -1,5 +1,7 @@
 # Encoding Optimization Plan — UTF-8 Traditional/Simplified Chinese Compatible
 
+> **Disposition (2026-11-02): Superseded baseline snapshot.** Its claims that the root `.editorconfig` and `encoding-tools.ps1` are absent conflict with the current workspace. Do not execute its setup steps as current work; reconcile only verified gaps with [`1792994615266-encoding-modernization-plan.md`](1792994615266-encoding-modernization-plan.md) and [`../PLAN.md`](../PLAN.md).
+
 ## Goal
 確保工作區所有檔案採用 UTF-8 編碼，同時支援繁體中文（Big5 超集）與簡體中文（GB2312/GBK 超集），零亂碼，LF 換行，二進位檔案保護。
 
