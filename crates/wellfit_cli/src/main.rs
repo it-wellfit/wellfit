@@ -2074,9 +2074,10 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
                 &batch_date,
                 enc,
                 Some(export_config),
+                // STUB: transport closure returns Ok(true) without network I/O.
+                // Production requires real HTTPS dispatch to E.Sun security component.
+                // Blocked by OQ-E3 (sandbox credentials pending from E.Sun account manager).
                 |_media| {
-                    // Production transport would send the media file to E.Sun
-                    // over TLS. Here we record success without network I/O.
                     Ok(true)
                 },
             );

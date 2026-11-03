@@ -35,6 +35,10 @@ pub struct EsunHttpClientConfig {
     /// This provides certificate pinning protection against man-in-the-middle
     /// attacks, as required by FR-BP-10 / QG-02.
     ///
+    /// STUB: Pinning infrastructure is implemented but not active by default
+    /// (empty vec). Requires bank server certificate SHA-256 hash to enable,
+    /// which is pending OQ-E3 sandbox credentials from E.Sun account manager.
+    ///
     /// To obtain a server cert hash:
     /// `openssl x509 -in server.pem -noout -fingerprint -sha256`
     pub pin_server_cert_sha256: Vec<String>,

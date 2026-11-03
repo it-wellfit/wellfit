@@ -134,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File "..\..\Knowledge\tools\dev-env\build.ps
 
 | Item | Status |
 |------|--------|
-| API V2.8 Implementation | Complete (8/8 APIs) |
+| API V2.8 Implementation | Complete (2/8 — TWD payment + status query; FR-BP-11~16 out of scope) |
 | Encoding Conversion | Complete (UTF-8 <-> CP950/Big5) |
 | Media File | Complete (422 char format) |
 | HTTP Client | Complete (TLS 1.2+, 2-Way SSL) |
