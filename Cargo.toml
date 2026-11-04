@@ -1,12 +1,14 @@
 ﻿[workspace]
 members = [
     "crates/wellfit_core",
-    "crates/wellfit_reports",
+    "crates/wellfit_reports", 
     "crates/wellfit_shopee",
     "crates/wellfit_mtrix",
     "crates/wellfit_cli",
     "crates/wellfit_sync",
     "crates/wellfit_bankpay",
+    "crates/assistive_tools",
+    "crates/wellfit_integration",
 ]
 resolver = "2"
 
@@ -22,6 +24,8 @@ wellfit_reports = { path = "crates/wellfit_reports" }
 wellfit_shopee = { path = "crates/wellfit_shopee" }
 wellfit_mtrix = { path = "crates/wellfit_mtrix" }
 wellfit_bankpay = { path = "crates/wellfit_bankpay" }
+wellfit_assist = { path = "crates/assistive_tools" }
+wellfit_integration = { path = "crates/wellfit_integration" }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 csv = "1.4"
@@ -39,3 +43,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pki-types = { version = "1" }
 webpki-roots = "0.26"
 base64 = "0.22"
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -89,6 +89,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "assistive_tools"
+version = "0.1.0"
+dependencies = [
+ "csv",
+ "encoding_rs",
+ "serde",
+ "serde_json",
+ "sha2",
+ "toml",
+ "wellfit_core",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1212,6 +1225,16 @@ dependencies = [
  "sha2",
  "toml",
  "uuid",
+]
+
+[[package]]
+name = "wellfit_integration"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "wellfit_core",
 ]
 
 [[package]]

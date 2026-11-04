@@ -13,7 +13,7 @@
 
 ## 1. 專案概況
 
-- 大前實業（Dachen Industrial）輔翼 ERP 與商業資料整合工具，**7-crate Rust 工作區**。
+- 大前實業（Dachen Industrial）輔翼 ERP 與商業資料整合工具，**8-crate Rust 工作區**。
 - 工作區包含 `wellfit.exe`（`wellfit_cli`）與獨立的 `wellfit_sync.exe`；Sync 的資料傳輸目前尚未實作。無前端、無 JavaScript。
 - 契約事實的唯一來源是跨專案知識庫 `2026/Knowledge/`，**不是**網路、**不是**既有文件的敘述。
 
@@ -27,6 +27,7 @@
 | `wellfit_mtrix` | `crates/wellfit_mtrix` | MTRIX 五檔契約、驗證與修復 | `MTRIX_SPEC`（56 欄，`src/spec.rs`）、`VrRule`（15，`src/validators.rs`）、`REPAIR_RULES`（12，`src/repairs.rs`）、`MtrixEngine`（`src/mtrix_engine.rs`） |
 | `wellfit_bankpay` | `crates/wellfit_bankpay` | E.Sun 銀行付款媒體與 API 整合 | BankPay 匯出／匯入、HTTP client、付款查詢 |
 | `wellfit_sync` | `crates/wellfit_sync` | 裝置探索、同步狀態與 daemon 骨架；資料傳輸尚未實作 | 設定、探索、健康檢查、SQLite 同步狀態 |
+| `wellfit_assist` | `crates/assistive_tools` | OEKAP 協助層：多格式邊界與編碼轉換、報表輸出、異常偵測基線、影子模式證據 | `DataFormat`／`Charset`／`TransformSpec`／`ReportSpec`／`render_table`／`ZScoreDetector`／`ShadowCompare`／`EvidenceStore` |
 | `wellfit_cli` | `crates/wellfit_cli` | `wellfit.exe` 進入點 | 九個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec`／`access-control`／`jit`／`bankpay` |
 
 ## 3. 建置入口（**必須**使用此入口）

@@ -1,7 +1,7 @@
 # Wellfit 合成容量基線
 
-**版本：** 1.3  
-**測試日期：** 2026-11-02  
+**版本：** 1.4  
+**測試日期：** 2026-11-04（v1.4 增 §3.8 自動化與整合層 release 基準）  
 **狀態：** 本機合成工程量測；不是生產驗收、容量保證或 SLA 承諾  
 **執行工具：** [`scripts/benchmark_synthetic_ingestion.ps1`](../scripts/benchmark_synthetic_ingestion.ps1)、[`scripts/benchmark_synthetic_test.ps1`](../scripts/benchmark_synthetic_test.ps1)  
 **操作方式：** [`CLI.md`](CLI.md)「本機合成容量量測」
@@ -182,6 +182,32 @@ powershell -ExecutionPolicy Bypass -File 'scripts\benchmark_synthetic_test.ps1' 
 ```
 
 `-Records` 可在 1 至 250,000 列間調整每個輸入檔的合成量。量測腳本輸出 JSON，包含 engine 結果、程序 CPU 與 peak working set。
+
+### 3.8 自動化與整合層 release 基準（Phase 2/3，2026-11-04）
+
+Phase 2/3 新增的協調、對帳、切換與採購自動化模組新增兩組忽略式 release 基準。兩組均以 `--release` 建置執行（有別於前述 debug 量測），測量核心演算法吞吐，不含 CLI 啟動、檔案 IO 或程序資源取樣。
+
+重跑（repository 根目錄；透過核准 build.ps1 執行）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "..\..\Knowledge\tools\dev-env\build.ps1" `
+  -Command "test -p wellfit_integration --release --test capacity -- --ignored --nocapture" `
+  -TargetDir "$env:LOCALAPPDATA\Temp\wellfit-target"
+
+powershell -ExecutionPolicy Bypass -File "..\..\Knowledge\tools\dev-env\build.ps1" `
+  -Command "test -p wellfit_shopee --release --test capacity -- --ignored --nocapture" `
+  -TargetDir "$env:LOCALAPPDATA\Temp\wellfit-target"
+```
+
+| 基準 | 規模 | 實測耗時 | 吞吐 |
+|---|---:|---:|---:|
+| 對帳引擎（CoordinationEngine::reconcile） | 10,000 筆 | 579.1 µs | 17,268,175 筆／秒 |
+| SHA-256 雜湊鏈驗證（verify_hash_chain） | 10,000 筆 | 9.7025 ms | 1,030,662 筆／秒 |
+| SHA-256 雜湊計算（compute_hash） | 10,000 次 | 3.1304 ms | 3,194,480 次／秒 |
+| 完整切換演練（4 階段生命週期） | 1,000 筆 | 1.2536 ms | 約 797,700 筆／秒 |
+| 採購自動化管線（procurement pipeline） | 2,000 列 | 8.9723 ms | 222,908 列／秒 |
+
+採購管線該次 2,000 列全部接受、0 列隔離（使用兩個權威 demo SKU 的合成資料）。對帳與切換演練使用全匹配合成記錄。這些是單次本機工程觀測，不是受控性能研究、併發測試或 SLA 承諾；對帳與雜湊為純記憶體操作，吞吐不隨磁碟或 SQLite 變化，但資料量、欄位長度與隔離比例仍可能改變實際表現。
 
 ## 4. 解讀與容量限制
 

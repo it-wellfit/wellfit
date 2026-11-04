@@ -1,0 +1,15 @@
+[package]
+name = "wellfit_integration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+wellfit_core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+wellfit_core = { workspace = true }

@@ -7,10 +7,14 @@
 //! arithmetic used by the MTRIX measures.
 
 pub mod access_control;
+pub mod audit_integrity;
+pub mod automation;
 pub mod config_validator;
 pub mod contract;
+pub mod customer_automation;
 pub mod error_codes;
 pub mod federation;
+pub mod inventory_automation;
 pub mod jit_permission;
 pub mod ledger;
 pub mod mdm;
@@ -20,10 +24,14 @@ pub mod scaled;
 pub mod text;
 
 pub use access_control::*;
+pub use audit_integrity::*;
+pub use automation::*;
 pub use config_validator::*;
 pub use contract::*;
+pub use customer_automation::*;
 pub use error_codes::*;
 pub use federation::*;
+pub use inventory_automation::*;
 pub use jit_permission::*;
 pub use ledger::*;
 pub use mdm::*;

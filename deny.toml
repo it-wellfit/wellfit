@@ -99,6 +99,10 @@ allow = [
     "Zlib",
     "Unlicense",
     "MPL-2.0",
+    # CDLA-Permissive-2.0: Mozilla CA root certificate data license used by
+    # webpki-roots (TLS trust anchors for wellfit_bankpay). Permissive,
+    # data-focused license from the Linux Foundation; no copyleft obligations.
+    "CDLA-Permissive-2.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the

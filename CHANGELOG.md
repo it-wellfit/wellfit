@@ -17,6 +17,13 @@
 
 - A repeatable synthetic Shopee/Reports capacity runner and measured one-million-record baseline with hashes, resource observations, and explicit non-SLA limitations.
 - Kilo Gateway 429 diagnostic guidance distinguishing documented anonymous limits from unknown authenticated/provider quotas and prohibiting disclosure of credentials or sensitive prompts.
+- **OEaAP 協助與自動化層（Phase 1–3，未發布）**：新增 `wellfit_assist`（多格式／多編碼資料轉換、報表產生、異常偵測、影子模式證據鏈）與 `wellfit_integration`（ERP 協調、雙軌對帳、功能旗標切換、切換演練）兩 crate；`wellfit_core` 新增自動化框架（重試退避、斷路器、工作流追蹤）、稽核完整性（SHA-256 鏈）、客戶自動化、庫存自動化；`wellfit_shopee`／`wellfit_mtrix`／`wellfit_bankpay` 各新增採購／出庫／應付自動化協調器。
+- Phase 2/3 容量基準（release 量測）：對帳 10,000 筆 17.3M 筆/秒、雜湊鏈驗證 1.03M entries/s、採購管線 2,000 列 223K 列/秒、完整切換演練 1,000 筆 1.25 ms（見 `docs/SYNTHETIC_CAPACITY_BASELINE.md` §3.8）。
+- 安全工作區審查與 ADR：`docs/SECURITY_REVIEW.md`、ADR-0004~0008（影子模式策略、韌性政策、稽核鏈、雙軌門檻、旗標切換）。
+
+### Changed
+
+- `deny.toml` licenses allowlist 新增 `CDLA-Permissive-2.0`（`webpki-roots` TLS 信任錨資料授權；寬鬆資料授權、無 copyleft 義務），`cargo deny check` 四項全過：`advisories ok, bans ok, licenses ok, sources ok`。
 
 ## [1.0.0] — 2026-10-20
 

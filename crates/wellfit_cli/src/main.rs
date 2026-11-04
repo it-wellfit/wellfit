@@ -2077,9 +2077,7 @@ fn run_bankpay(ui: &UiConfig, action: &BankpayAction) -> Result<i32, String> {
                 // STUB: transport closure returns Ok(true) without network I/O.
                 // Production requires real HTTPS dispatch to E.Sun security component.
                 // Blocked by OQ-E3 (sandbox credentials pending from E.Sun account manager).
-                |_media| {
-                    Ok(true)
-                },
+                |_media| Ok(true),
             );
             spin.finish(Some("bank media file assembled"));
 

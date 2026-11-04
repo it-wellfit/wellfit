@@ -20,6 +20,7 @@ pub mod bankpay;
 pub mod encoding;
 pub mod http;
 pub mod media;
+pub mod payable_automation;
 pub mod query;
 pub mod release;
 
@@ -28,5 +29,6 @@ pub use bankpay::*;
 pub use encoding::*;
 pub use http::*;
 pub use media::*;
+pub use payable_automation::*;
 pub use query::*;
 pub use release::*;

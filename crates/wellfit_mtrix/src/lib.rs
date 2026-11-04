@@ -15,6 +15,7 @@
 
 pub mod config;
 pub mod mtrix_engine;
+pub mod outbound_automation;
 pub mod pipeline;
 pub mod repairs;
 pub mod rule_engine;
@@ -23,6 +24,7 @@ pub mod validators;
 
 pub use config::*;
 pub use mtrix_engine::*;
+pub use outbound_automation::*;
 pub use pipeline::*;
 pub use repairs::*;
 pub use rule_engine::*;
