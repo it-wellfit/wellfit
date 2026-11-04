@@ -20,6 +20,7 @@
 - **OEaAP 協助與自動化層（Phase 1–3，未發布）**：新增 `wellfit_assist`（多格式／多編碼資料轉換、報表產生、異常偵測、影子模式證據鏈）與 `wellfit_integration`（ERP 協調、雙軌對帳、功能旗標切換、切換演練）兩 crate；`wellfit_core` 新增自動化框架（重試退避、斷路器、工作流追蹤）、稽核完整性（SHA-256 鏈）、客戶自動化、庫存自動化；`wellfit_shopee`／`wellfit_mtrix`／`wellfit_bankpay` 各新增採購／出庫／應付自動化協調器。
 - Phase 2/3 容量基準（release 量測）：對帳 10,000 筆 17.3M 筆/秒、雜湊鏈驗證 1.03M entries/s、採購管線 2,000 列 223K 列/秒、完整切換演練 1,000 筆 1.25 ms（見 `docs/SYNTHETIC_CAPACITY_BASELINE.md` §3.8）。
 - 安全工作區審查與 ADR：`docs/SECURITY_REVIEW.md`、ADR-0004~0008（影子模式策略、韌性政策、稽核鏈、雙軌門檻、旗標切換）。
+- 外部依賴整備：`docs/operations/VENDOR_RESPONSE_INTAKE.md`（OQ-F1/F2 原廠回覆收件與落碼映射）、`docs/bankpay/09-sandbox-acceptance-runbook.md`（OQ-E3 沙盒機械化執行手冊）、`docs/operations/PRODUCTION_AUTHORIZATION_DECISION.md`（生產授權階段決策：不即刻生產、授權階段式條件推進）。
 
 ### Changed
 
