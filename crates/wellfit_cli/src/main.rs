@@ -9,6 +9,7 @@
 //! - `mtrix`   - wave 3, the Alpargatas MTRIX five file drop
 //! - `audit`   - full physical audit over the real files in the data folder
 //! - `spec`    - the MTRIX contract and rule catalogue, generated from the code
+//! - `shadow`  - read-only shadow capture evidence for a vendor export (S1-1)
 //!
 //! Global options:
 //! - `--color`   - color output: auto (default), always, never
@@ -186,6 +187,22 @@ enum Commands {
         /// Sub-command: export, import, or query
         #[command(subcommand)]
         action: BankpayAction,
+    },
+    /// Shadow capture - read-only verification evidence for a vendor export
+    /// (S1-1: End = Begin + In - Out + Adj recomputed independently).
+    Shadow {
+        /// Pipeline of the vendor export
+        #[arg(long, default_value = "reports", value_parser = ["reports"])]
+        pipeline: String,
+        /// Path to the vendor export file
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Artifact root for the evidence output
+        #[arg(long, default_value = "artifacts/shadow")]
+        artifacts: PathBuf,
+        /// Batch identifier recorded in the evidence
+        #[arg(short, long, default_value = "BATCH-CLI-SHADOW")]
+        batch: String,
     },
 }
 
@@ -560,7 +577,106 @@ fn run(cli: &Cli, ui: &UiConfig) -> Result<i32, String> {
         Commands::AccessControl { action } => run_access_control(ui, action),
         Commands::Jit { action } => run_jit(ui, action),
         Commands::Bankpay { action } => run_bankpay(ui, action),
+        Commands::Shadow {
+            pipeline,
+            input,
+            artifacts,
+            batch,
+        } => run_shadow(ui, pipeline, input, artifacts, batch),
     }
+}
+
+// ---------------------------------------------------------------- shadow
+
+fn run_shadow(
+    ui: &UiConfig,
+    pipeline: &str,
+    input: &Path,
+    artifacts: &Path,
+    batch: &str,
+) -> Result<i32, String> {
+    if pipeline != "reports" {
+        return Err(format!(
+            "shadow pipeline '{pipeline}' is not supported yet (supported: reports)"
+        ));
+    }
+
+    let spin = Spinner::new("capturing shadow evidence...", ui.color_enabled());
+    let outcome = wellfit_assist::capture::capture_reports_export(input, artifacts, batch)
+        .map_err(|e| format!("shadow capture failed: {e}"))?;
+    spin.finish(Some("shadow evidence written"));
+
+    let evidence = &outcome.evidence;
+    heading(ui, "shadow capture - reports");
+    kv(ui, "input", &input.display().to_string());
+    kv(ui, "input sha256", &evidence.input_sha256);
+    kv(ui, "batch", batch);
+    kv(ui, "records total", &evidence.records_total.to_string());
+    kv(
+        ui,
+        "records verified",
+        &evidence.records_verified.to_string(),
+    );
+    kv(
+        ui,
+        "records mismatched",
+        &evidence.records_mismatched.to_string(),
+    );
+    kv(
+        ui,
+        "row level match",
+        if evidence.row_level_match {
+            "MATCH"
+        } else {
+            "DIFF"
+        },
+    );
+    kv(ui, "evidence", &outcome.evidence_path.display().to_string());
+
+    if !evidence.mismatches.is_empty() {
+        println!();
+        heading(ui, "mismatched rows");
+        print_separator(60);
+        print_table_row(
+            &["line", "item", "warehouse", "vendor", "ours", "note"],
+            true,
+        );
+        print_separator(60);
+        for m in evidence.mismatches.iter().take(10) {
+            print_table_row(
+                &[
+                    m.line.to_string(),
+                    m.item_no.clone(),
+                    m.warehouse_code.clone(),
+                    m.vendor_end_inv
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string()),
+                    m.our_expected_end
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "?".to_string()),
+                    m.note.clone(),
+                ],
+                false,
+            );
+        }
+        if evidence.mismatches.len() > 10 {
+            info(
+                ui,
+                &format!(
+                    "... and {} more mismatched rows",
+                    evidence.mismatches.len() - 10
+                ),
+            );
+        }
+        warn(
+            ui,
+            "differences found - recorded as evidence for operator review",
+        );
+    } else {
+        ok(ui, "all rows verified against the inventory identity");
+    }
+
+    Ok(if evidence.row_level_match { 0 } else { 2 })
 }
 
 // ---------------------------------------------------------------- status

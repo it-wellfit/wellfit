@@ -63,7 +63,7 @@ FlapsErp 為第三方 ERP，其自動化通道（COM/RDA/flapserp://）的政策
 
 ## 驗證方式
 
-- `cargo test -p assistive_tools`（28 測試）✔
+- `cargo test -p wellfit_assist`（36 測試）✔
 - M1 出口條件：影子差異清單 ≥ 1 份（含比對命令與快照雜湊）— ⚠ 待執行（需 FlapsErp 環境）
 
 ## 後續檢討條件

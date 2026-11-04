@@ -26,6 +26,7 @@ Commands:
   access-control  Evaluate access-control policies
   jit      Manage just-in-time permission requests
   bankpay  E.Sun Bank payment integration
+  shadow   Shadow capture - read-only verification evidence for a vendor export
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -277,7 +278,40 @@ Options:
 
 此輸出即知識庫 [`../../Knowledge/specs/mtrix-field-dictionary.md`](../../../Knowledge/specs/mtrix-field-dictionary.md) 之內容。
 
-## 7. 共通約定
+## 7. `shadow`
+
+```
+Usage: wellfit.exe shadow [OPTIONS] --input <INPUT>
+
+Options:
+  -i, --input <INPUT>          Path to the vendor export file
+      --pipeline <PIPELINE>    Pipeline of the vendor export [default: reports] [possible values: reports]
+      --artifacts <ARTIFACTS>  Artifact root for the evidence output [default: artifacts/shadow]
+  -b, --batch <BATCH>          Batch identifier recorded in the evidence [default: BATCH-CLI-SHADOW]
+```
+
+```powershell
+& $wf shadow --pipeline reports --input data/fuyi_inventory_report.csv --batch DEMO-001
+```
+
+S1-1 影子擷取：唯讀讀取供應商匯出檔（上限 100 MiB、UTF-8、允許 BOM），以**欄位名稱**解析契約（缺欄即零列失敗），對每一列獨立重算庫存恆等式 `End = Begin + In - Out + Adj`（checked 運算、溢位即標記），並產生 `wellfit-shadow-evidence/v1` 證據 JSON 至 `<artifacts>/shadow-mode/`。
+
+| 退出碼 | 意義 |
+|---|---|
+| 0 | 全部列與獨立重算一致（證據仍會寫入） |
+| 2 | 有差異列（`value mismatch`／`overflow`／`unparsable`），已作為證據記錄 |
+| 1 | 錯誤（輸入缺失、超過上限、非 UTF-8、契約不符、證據寫入失敗） |
+
+證據 JSON 含：輸入 SHA-256、供應商值 digest、我方重算 digest、逐列差異清單（line／item／warehouse／兩側數值／原因）。**唯讀保證**：輸入檔僅被讀取；唯一寫入為 artifact root 下之證據檔。**回退**＝停止執行本命令（無殘留狀態）。規格全文：`docs/operations/SHADOW_CAPTURE_SPECIFICATION.md`。
+
+範例（差異情境會列出差異列）：
+
+```
+line │ item │ warehouse │ vendor │ ours │ note
+2 │ 8 │ WH-A │ 999 │ 650 │ value mismatch
+```
+
+## 8. 共通約定
 
 | 項目 | 說明 |
 |---|---|

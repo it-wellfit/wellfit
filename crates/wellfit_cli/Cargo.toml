@@ -20,3 +20,4 @@ serde_json.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 wellfit_bankpay.workspace = true
+wellfit_assist.workspace = true

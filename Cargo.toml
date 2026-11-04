@@ -7,7 +7,7 @@ members = [
     "crates/wellfit_cli",
     "crates/wellfit_sync",
     "crates/wellfit_bankpay",
-    "crates/assistive_tools",
+    "crates/wellfit_assist",
     "crates/wellfit_integration",
 ]
 resolver = "2"
@@ -24,7 +24,7 @@ wellfit_reports = { path = "crates/wellfit_reports" }
 wellfit_shopee = { path = "crates/wellfit_shopee" }
 wellfit_mtrix = { path = "crates/wellfit_mtrix" }
 wellfit_bankpay = { path = "crates/wellfit_bankpay" }
-wellfit_assist = { path = "crates/assistive_tools" }
+wellfit_assist = { path = "crates/wellfit_assist" }
 wellfit_integration = { path = "crates/wellfit_integration" }
 
 rusqlite = { version = "0.32", features = ["bundled"] }

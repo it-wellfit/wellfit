@@ -13,7 +13,7 @@
 
 | 類別 | 對象 |
 |---|---|
-| 新增 crate | `assistive_tools`、`wellfit_integration` |
+| 新增 crate | `wellfit_assist`、`wellfit_integration` |
 | 新增模組 | `wellfit_core::{automation, audit_integrity, customer_automation, inventory_automation}`、`wellfit_shopee::procurement_automation`、`wellfit_mtrix::outbound_automation`、`wellfit_bankpay::payable_automation` |
 | 既有機制 | IdempotencyLedger、ReleaseGate、MDM、access_control、jit_permission、rustls HTTP client |
 

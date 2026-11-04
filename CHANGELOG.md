@@ -21,6 +21,11 @@
 - Phase 2/3 容量基準（release 量測）：對帳 10,000 筆 17.3M 筆/秒、雜湊鏈驗證 1.03M entries/s、採購管線 2,000 列 223K 列/秒、完整切換演練 1,000 筆 1.25 ms（見 `docs/SYNTHETIC_CAPACITY_BASELINE.md` §3.8）。
 - 安全工作區審查與 ADR：`docs/SECURITY_REVIEW.md`、ADR-0004~0008（影子模式策略、韌性政策、稽核鏈、雙軌門檻、旗標切換）。
 - 外部依賴整備：`docs/operations/VENDOR_RESPONSE_INTAKE.md`（OQ-F1/F2 原廠回覆收件與落碼映射）、`docs/bankpay/09-sandbox-acceptance-runbook.md`（OQ-E3 沙盒機械化執行手冊）、`docs/operations/PRODUCTION_AUTHORIZATION_DECISION.md`（生產授權階段決策：不即刻生產、授權階段式條件推進）。
+- **S1-1 影子擷取**：`wellfit_assist::capture`（唯讀、100 MiB 上限、欄位名稱契約、獨立重算庫存恆等式、溢位安全）＋ CLI `wellfit shadow --pipeline reports --input <檔> --artifacts <目錄> --batch <id>`（退出碼 0=一致／2=有差異證據／1=錯誤）＋ 證據格式 `wellfit-shadow-evidence/v1` ＋ 規格 `docs/operations/SHADOW_CAPTURE_SPECIFICATION.md`（S1-1~S1-4 全定義）。實測：MATCH 4/4（合成示範）與 DIFF 偵測（注入單列錯誤）皆通過。
+
+### 變更（Changed）
+
+- Crate 更名對齊：`assistive_tools` → **`wellfit_assist`**（套件名與目錄 `crates/wellfit_assist` 統一；依賴、AGENTS.md、ADR、安全審查、README 同步更新）。
 
 ### Changed
 

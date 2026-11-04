@@ -7,11 +7,13 @@
 //! replacement strategy.
 
 pub mod anomaly;
+pub mod capture;
 pub mod data_transformer;
 pub mod report_generator;
 pub mod shadow;
 
 pub use anomaly::*;
+pub use capture::*;
 pub use data_transformer::*;
 pub use report_generator::*;
 pub use shadow::*;

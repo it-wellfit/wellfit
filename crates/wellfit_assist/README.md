@@ -1,8 +1,8 @@
-# Assistive Tools — OEKAP Cornerstone Crate
+# wellfit_assist — OEKAP Cornerstone Crate
 
 ## Overview
 
-The `assistive_tools` crate is the cornerstone of the Open Enterprise Knowledge & Action Platform (OEKAP) development strategy. It provides the foundational assistive capabilities that enable gradual replacement of vendor-dependent ERP functionality.
+The `wellfit_assist` crate is the cornerstone of the Open Enterprise Knowledge & Action Platform (OEKAP) development strategy. It provides the foundational assistive capabilities that enable gradual replacement of vendor-dependent ERP functionality.
 
 ## Modules
 
@@ -41,6 +41,19 @@ Shadow mode — read-only observation and comparison:
 - `ShadowCompare`: aggregates captures and computes match rate
 - `EvidenceStore`: file-based evidence persistence with JSON snapshots
 
+### capture (S1-1)
+Shadow capture — read-only verification evidence for a vendor export:
+- `capture_reports_export`: recomputes the Fuyi inventory identity
+  (End = Begin + In - Out + Adj, overflow-safe) independently of the vendor's
+  stated values; read-only with a 100 MiB cap; requires zero writes outside the
+  artifact root
+- `ShadowEvidence`: evidence document schema `wellfit-shadow-evidence/v1`
+  (input SHA-256, vendor digest, our digest, per-row mismatches)
+- `MismatchRow`: `value mismatch` / `overflow` / `unparsable` rows with
+  line numbers and both sides of the comparison
+- CLI: `wellfit shadow --pipeline reports --input <file> --artifacts <dir> --batch <id>`
+  (exit 0 = all rows match, 2 = differences recorded as evidence, 1 = error)
+
 ## Error Handling
 
 All modules use the unified `AssistError` enum:
@@ -53,7 +66,7 @@ All modules use the unified `AssistError` enum:
 
 ## Testing
 
-28 unit tests covering:
+36 unit tests covering:
 - Encoding round-trips (UTF-8, Big5, GBK, Shift_JIS)
 - Header validation (complete, missing)
 - CSV ↔ JSON conversion
@@ -65,6 +78,9 @@ All modules use the unified `AssistError` enum:
 - Shadow comparison (normal, empty)
 - Evidence store (save/load round-trip)
 - Shadow report generation
+- Shadow capture / S1-1 (balanced match, value mismatch, overflow, unparsable
+  cell, missing column fails before rows, reordered header, UTF-8 BOM,
+  missing input)
 
 ## Quality
 
@@ -76,6 +92,7 @@ All modules use the unified `AssistError` enum:
 ## Dependencies
 
 - `wellfit_core`: shared core (ColumnContract, MDM, ledger)
+- `wellfit_reports`: Fuyi inventory report contract (capture verification)
 - `serde` + `serde_json`: serialization
 - `encoding_rs`: charset handling
 - `toml`: configuration

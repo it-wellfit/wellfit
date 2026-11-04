@@ -1,5 +1,5 @@
 [package]
-name = "assistive_tools"
+name = "wellfit_assist"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 wellfit_core = { workspace = true }
+wellfit_reports = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 encoding_rs = { workspace = true }
