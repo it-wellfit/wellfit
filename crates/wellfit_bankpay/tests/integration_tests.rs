@@ -275,6 +275,7 @@ fn http_client_config_tls() {
         ca_cert_path: Some("/path/to/ca.pem".to_string()),
         pin_server_cert_sha256: vec![],
         timeout_secs: 30,
+        retry: None,
     };
     let client = wellfit_bankpay::EsunHttpClient::new(config);
     assert_eq!(
@@ -452,6 +453,7 @@ fn cert_pinning_config_accepts_pinned_hash() {
             "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string(),
         ],
         timeout_secs: 30,
+        retry: None,
     };
     assert_eq!(config.pin_server_cert_sha256.len(), 1);
     // SHA-256 hashes should be 64 hex chars
