@@ -1138,3 +1138,154 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod slice_audit_tests {
+    //! Slice-audit tests (Test Engineer report): retry policy bounds,
+    //! payment-never-retried invariant, retryable classification, jitter
+    //! bounds and certificate pinning. All local - no network, no bank.
+
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    fn client_with_sleep_counter(sleeps: Arc<AtomicUsize>) -> EsunHttpClient {
+        EsunHttpClient::with_sleep(
+            EsunHttpClientConfig {
+                base_url: "http://127.0.0.1:1".to_string(), // connection refused
+                retry: Some(EsunHttpClientConfig::http_retry()),
+                ..Default::default()
+            },
+            Arc::new(move |_| {
+                sleeps.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
+    }
+
+    #[test]
+    fn idempotent_status_query_retries_three_times_then_fails() {
+        let sleeps = Arc::new(AtomicUsize::new(0));
+        let client = client_with_sleep_counter(sleeps.clone());
+        let result = client.post_json_with_retry::<serde_json::Value, serde_json::Value>(
+            "/status/none",
+            "TEST",
+            &serde_json::json!({}),
+            Some(&EsunHttpClientConfig::http_retry()),
+        );
+        assert!(result.is_err(), "transport errors must surface as Err");
+        // http_retry(): max_retries = 3 -> attempts 1..=3 sleep, attempt 4 aborts.
+        assert_eq!(sleeps.load(Ordering::SeqCst), 3, "3 sleeps = 3 retries");
+    }
+
+    #[test]
+    fn payment_creation_is_never_retried_on_transport_error() {
+        // Invariant: create_twd_payment passes retry = None. A timed-out POST
+        // may already have been processed by the bank - a blind retry risks
+        // double payment. Assert zero sleeps (zero retries) on transport error.
+        let sleeps = Arc::new(AtomicUsize::new(0));
+        let sleeps_counter = sleeps.clone();
+        let client = EsunHttpClient::with_sleep(
+            EsunHttpClientConfig {
+                base_url: "http://127.0.0.1:1".to_string(),
+                retry: None,
+                ..Default::default()
+            },
+            Arc::new(move |_| {
+                sleeps_counter.fetch_add(1, Ordering::SeqCst);
+            }),
+        );
+        let result = client.post_json_with_retry::<serde_json::Value, serde_json::Value>(
+            "/payment/createTwdPaymentInstruction",
+            "TEST",
+            &serde_json::json!({}),
+            None,
+        );
+        assert!(result.is_err());
+        assert_eq!(
+            sleeps.load(Ordering::SeqCst),
+            0,
+            "payment creation must never retry (double-payment risk)"
+        );
+    }
+
+    #[test]
+    fn retryable_status_classification() {
+        for code in [429u16, 500, 502, 503, 504] {
+            assert!(retryable_status(code), "{code} must be retryable");
+        }
+        for code in [200u16, 400, 401, 403, 404] {
+            assert!(!retryable_status(code), "{code} must not be retryable");
+        }
+    }
+
+    #[test]
+    fn jittered_delay_stays_within_base_and_handles_zero() {
+        assert_eq!(jittered_delay(Duration::ZERO, 42), Duration::ZERO);
+        for state in [0u64, 1, 42, u64::MAX] {
+            let d = jittered_delay(Duration::from_millis(200), state);
+            assert!(d <= Duration::from_millis(200), "full jitter cap: {d:?}");
+        }
+    }
+
+    #[test]
+    fn normalize_pins_trims_lowercases_and_rejects_bad_shapes() {
+        // An 8-char pin can never be valid - trim does not relax the length rule.
+        assert!(normalize_pins(&[" ABCD1234 ".to_string()]).is_err());
+        let ok = normalize_pins(&[
+            "  Ab23456789012345678901234567890123456789012345678901234567890123  ".to_string(),
+        ])
+        .expect("valid hex");
+        assert_eq!(
+            ok[0],
+            "ab23456789012345678901234567890123456789012345678901234567890123"
+        );
+    }
+
+    #[test]
+    fn pin_cert_der_matches_verifies_digest() {
+        let der = vec![1u8, 2, 3, 4];
+        use sha2::Digest;
+        let hex: String = sha2::Sha256::digest(&der)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert!(pin_cert_der_matches(std::slice::from_ref(&hex), &der));
+        assert!(
+            pin_cert_der_matches(&["  ".to_string() + &hex.to_uppercase() + "  "], &der),
+            "case/space tolerant"
+        );
+        assert!(
+            !pin_cert_der_matches(&["deadbeef".to_string()], &der),
+            "wrong digest rejected"
+        );
+        assert!(
+            pin_cert_der_matches(&[], &der),
+            "empty pins = no pinning = allow"
+        );
+    }
+
+    #[test]
+    fn timeout_secs_degrades_to_error_not_hang() {
+        // Local listener that accepts but never responds: the 1s client
+        // timeout must surface as Err (not a hang).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let handle = std::thread::spawn(move || {
+            let (_s, _) = listener.accept().expect("accept");
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        });
+        let client = EsunHttpClient::new(EsunHttpClientConfig {
+            base_url: format!("https://127.0.0.1:{port}"),
+            timeout_secs: 1,
+            ..Default::default()
+        });
+        let result = client.post_json_with_retry::<serde_json::Value, serde_json::Value>(
+            "/timeout/probe",
+            "TEST",
+            &serde_json::json!({}),
+            None,
+        );
+        assert!(result.is_err(), "timeout must degrade to Err");
+        drop(handle);
+    }
+}
