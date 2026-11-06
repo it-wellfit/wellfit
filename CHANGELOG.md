@@ -10,6 +10,16 @@
 
 ### Changed
 
+- **`wellfit_bankpay` HTTP 重試機制（研究驅動設計）**：`EsunHttpClientConfig` 新增 `retry: Option<RetryConfig>`（重用 `wellfit_core::automation::RetryConfig`，單一事實來源；`http_retry()` 預設 3 次重試／200 ms 基數／2x／2 s 上限，針對本機安控元件調校）。語義依 AWS Builders' Library《Timeouts, retries and backoff with jitter》與 MDN/RFC 9110 冪等語義：**狀態查詢（唯讀冪等）**對傳輸失敗與 429/500/502/503/504 以 full-jitter 上限指數退避重試（xorshift64* 決定性抖動），尊重 `Retry-After: <秒>`（上限截斷至 max_delay_ms）；**付款建立（POST，非冪等）永不自動重試**——逾時可能已被銀行處理，安全路徑是 dispatch-uncertain 對帳（`query_twd_status`），盲重試可能重複付款。睡眠函式以 `with_sleep` 依賴注入（測試零延遲決定性）。測試以**真實 loopback socket mock server**（完整排水 HTTP 請求避免 RST 摧毀回應的 os error 10053 競態）覆蓋：傳輸失敗重試至成功（3 次連線）、重試耗盡回報次數、POST 不重試（僅 1 次連線）、429 重試後成功、4xx 不重試且信封原樣返回、Retry-After 尊重並截斷、retryable_status 精確集合、jitter 界限與決定性。`send_once` 回傳自有 `SendOutcome` 列舉（消除 `clippy::result_large_err`）；憑證釘選失敗改回報型別化 `rustls::Error::InvalidCertificate(CertificateError::ApplicationVerificationFailure)`（對齊 rustls 維護者建議的委派模式與 oxitls `CertPinVerifier` 慣例）。**驗證**：bankpay 56 單元 + 17 整合通過；全工作區 **414 通過、0 失敗、10 ignored**；fmt 0 差異、clippy 零警告；重試套件連跑 3 次零 flakiness。
+- **MTRIX 管線三次冪等驗證（不同 batchId）**：`run-mtrix-pipeline.ps1` 執行三次（batchId `ERP-BATCH-20261106-115200/115201/115202`），結果完全一致：5 檔／25 列／25 accepted／0 quarantined／37 repairs／51 findings／status=PartialAccepted；各次同 batchId 重跑均正確拒絕（exit=1）。首跑時間 931→50 ms 為冷啟動（防毒掃描）開銷，非處理差異。
+- **COM 每呼叫延遲五次量測取中位數**：P50=0.1783 ms、P95=0.2634 ms、P99=0.3394 ms、mean=0.2127 ms；五次 P50 變異 ±4%（較 v1.0 兩次量測的 14% 收斂），多次取中位數方法論生效。
+- `scripts/perf/flaps-perf.ps1` CDP 探測器增加**目標身分驗證**：改查 `/json/version`（`Browser`/`User-Agent`）、記錄埠佔用者（`Get-NetTCPConnection` + `Get-Process`），並依 FlapsErp 執行狀態區分 `FOUND-NOT-FLAPSERP`／`FOUND-FOREIGN-BROWSER`／`FOUND-CANDIDATE`／`FOUND-UNVERIFIED`。修復將 Edge 遠端除錯埠（`--remote-debugging-port=9222`）誤判為 FlapsErp CDP 的問題（原報告 §2.1）。實測：`port 9222: FOUND-FOREIGN-BROWSER owner=msedge(27284) browser=Edg/156.0.4314.58`。字面量內之非 ASCII 破折號改為 ASCII，符合檔頭「僅含 ASCII 字面量」規範。
+- **首次真實 FlapsErp 基線**（`artifacts/perf/20261106-105141/`）：FlapsErp 執行中，8 行程（Electron 多行程架構），WS 中位數 30.2 MB（min 9.4 / max 80.9）；主行程 WS 80.8 MB / paged 99.1 MB / 28 threads。COM 每呼叫延遲第 3 次量測：P50=0.1962 ms、P95=0.3118 ms、P99=0.4127 ms（與前兩次 P50 0.2046/0.1764 ms 一致，量測收斂）。
+
+### Fixed
+
+- **`wellfit_bankpay` 編譯修復（http.rs 重建）**：`src/http.rs` 自 commit 5ef4d98 起引用不存在的型別（`EsunHttpClientConfigV2`／`EsunEnvironment`／`CertificateConfig`／`ureq::Client`）共 32 個編譯錯誤，導致 `wellfit_bankpay`、`wellfit_cli`、`wellfit_integration` 全部無法建置。依消費端實際介面（`bankpay.rs`、`wellfit_cli` bankpay 子命令、`tests/integration_tests.rs`）重建：`EsunHttpClientConfig`（`Debug, Clone`，正確 `Default`）、`EsunHttpClient`（`tls_config`／`http_client: Option<ureq::Agent>`／`tls_load_error` 私有欄位）、`post_json`（接受 `Source-System` 標頭、非 2xx 仍解析信封）、`create_twd_payment`／`retrieve_twd_status`（修正 `TwdStatusResponseData` 型別，解開 `bankpay.rs:409` 連鎖錯誤）、`new_test_client`／`mock_payment_response`／`mock_status_response`（QG-04 離線 mock，明確命名 `mock_` 不冒充真實回應）。同時實作先前為 stub 的 **QR-02 憑證釘選**：`PinnedCertVerifier`（webpki 鏈驗證 + 葉憑證 SHA-256 釘選，大小寫不敏感）。安全語義：TLS 材料設定但載入失敗 → 拒絕請求，不靜默降級；pinning 無 `ca_cert_path` → 建構期失敗（空 root store 無法驗證任何伺服器）。刪除游離的 `crates/wellfit_bankpay/http.rs`（殘缺副本）與未宣告的空 `src/retry_code.rs`。**驗證**：48 單元 + 17 整合通過、0 失敗；全工作區 406 通過、0 失敗、10 ignored（既有手動/環境限制）；clippy `-D warnings` 零警告；fmt 0 差異。
+
 - Shopee bulk idempotency locking now borrows order keys instead of allocating a second million-entry `(String, amount)` request vector; SQLite locking remains in one transaction.
 - Shopee and Reports CSV ingestion uses record-aware parsing with strict malformed-quote rejection, duplicate normalized-header rejection, and CSV-safe quarantine/output serialization.
 
@@ -29,6 +39,9 @@
 
 ### Changed
 
+- **`wellfit_bankpay` HTTP 重試機制（研究驅動設計）**：`EsunHttpClientConfig` 新增 `retry: Option<RetryConfig>`（重用 `wellfit_core::automation::RetryConfig`，單一事實來源；`http_retry()` 預設 3 次重試／200 ms 基數／2x／2 s 上限，針對本機安控元件調校）。語義依 AWS Builders' Library《Timeouts, retries and backoff with jitter》與 MDN/RFC 9110 冪等語義：**狀態查詢（唯讀冪等）**對傳輸失敗與 429/500/502/503/504 以 full-jitter 上限指數退避重試（xorshift64* 決定性抖動），尊重 `Retry-After: <秒>`（上限截斷至 max_delay_ms）；**付款建立（POST，非冪等）永不自動重試**——逾時可能已被銀行處理，安全路徑是 dispatch-uncertain 對帳（`query_twd_status`），盲重試可能重複付款。睡眠函式以 `with_sleep` 依賴注入（測試零延遲決定性）。測試以**真實 loopback socket mock server**（完整排水 HTTP 請求避免 RST 摧毀回應的 os error 10053 競態）覆蓋：傳輸失敗重試至成功（3 次連線）、重試耗盡回報次數、POST 不重試（僅 1 次連線）、429 重試後成功、4xx 不重試且信封原樣返回、Retry-After 尊重並截斷、retryable_status 精確集合、jitter 界限與決定性。`send_once` 回傳自有 `SendOutcome` 列舉（消除 `clippy::result_large_err`）；憑證釘選失敗改回報型別化 `rustls::Error::InvalidCertificate(CertificateError::ApplicationVerificationFailure)`（對齊 rustls 維護者建議的委派模式與 oxitls `CertPinVerifier` 慣例）。**驗證**：bankpay 56 單元 + 17 整合通過；全工作區 **414 通過、0 失敗、10 ignored**；fmt 0 差異、clippy 零警告；重試套件連跑 3 次零 flakiness。
+- **MTRIX 管線三次冪等驗證（不同 batchId）**：`run-mtrix-pipeline.ps1` 執行三次（batchId `ERP-BATCH-20261106-115200/115201/115202`），結果完全一致：5 檔／25 列／25 accepted／0 quarantined／37 repairs／51 findings／status=PartialAccepted；各次同 batchId 重跑均正確拒絕（exit=1）。首跑時間 931→50 ms 為冷啟動（防毒掃描）開銷，非處理差異。
+- **COM 每呼叫延遲五次量測取中位數**：P50=0.1783 ms、P95=0.2634 ms、P99=0.3394 ms、mean=0.2127 ms；五次 P50 變異 ±4%（較 v1.0 兩次量測的 14% 收斂），多次取中位數方法論生效。
 - `deny.toml` licenses allowlist 新增 `CDLA-Permissive-2.0`（`webpki-roots` TLS 信任錨資料授權；寬鬆資料授權、無 copyleft 義務），`cargo deny check` 四項全過：`advisories ok, bans ok, licenses ok, sources ok`。
 
 ## [1.0.0] — 2026-10-20

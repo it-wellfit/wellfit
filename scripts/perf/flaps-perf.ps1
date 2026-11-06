@@ -85,25 +85,53 @@ function Invoke-ComProbe {
 }
 
 # ---------- cdp ----------
+function Get-PortOwner {
+  param([int]$Port)
+  try {
+    $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop | Select-Object -First 1
+    $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+    if ($proc) { return @{ pid = $proc.Id; name = $proc.ProcessName } }
+    return @{ pid = $conn.OwningProcess; name = 'unknown' }
+  } catch { return $null }
+}
+
 function Invoke-CdpProbe {
+  # Target verification: /json/list alone proves nothing (any Chromium-based
+  # browser listening on 9222 answers, e.g. Edge with --remote-debugging-port).
+  # Identity comes from /json/version Browser/User-Agent plus process ownership.
   $ports = @(9222)
   $results = @()
   $erpRunning = [bool](Get-Process -Name 'FlapsErp' -ErrorAction SilentlyContinue)
   foreach ($port in $ports) {
+    $owner = Get-PortOwner -Port $port
+    $version = $null
     try {
-      $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-      $targets = $resp.Content | ConvertFrom-Json
-      $results += @{ port = $port; status = 'FOUND'; targets = @($targets | ForEach-Object { $_.type + ':' + $_.title }) }
-    } catch {
-      $results += @{ port = $port; status = 'NOT-FOUND' }
+      $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$port/json/version" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+      $version = $resp.Content | ConvertFrom-Json
+    } catch { }
+    if (-not $version) {
+      $results += @{ port = $port; status = 'NOT-FOUND'; erpRunning = $erpRunning; ownerPid = $owner.pid; ownerName = $owner.name }
+      continue
     }
+    $browser = [string]$version.Browser
+    $userAgent = [string]$version.'User-Agent'
+    $isEdge = ($browser -match 'Edg/') -or ($userAgent -match 'Edg/')
+    if (-not $erpRunning) {
+      $status = 'FOUND-NOT-FLAPSERP'   # FlapsErp not running: cannot be its CDP
+    } elseif ($isEdge) {
+      $status = 'FOUND-FOREIGN-BROWSER'
+    } elseif ($userAgent -match 'Electron' -or $browser -match 'Chrome/') {
+      $status = 'FOUND-CANDIDATE'
+    } else {
+      $status = 'FOUND-UNVERIFIED'
+    }
+    $results += @{ port = $port; status = $status; browser = $browser; userAgent = $userAgent; erpRunning = $erpRunning; ownerPid = $owner.pid; ownerName = $owner.name }
   }
   return @{
     status = 'OK'; erpRunning = $erpRunning; probes = $results
     launchHint = 'For A3 track (needs on-site verification + EULA policy): relaunch with --remote-debugging-port=9222 via flapserp:// or shortcut arguments.'
   }
 }
-
 switch ($Probe) {
   'baseline' { $result.probes.baseline = Invoke-BaselineProbe }
   'com'      { $result.probes.com      = Invoke-ComProbe }
@@ -120,7 +148,7 @@ $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $jsonPath -Encoding
 
 # Markdown summary
 $md = New-Object System.Collections.Generic.List[string]
-$md.Add("# FlapsErp Perf Baseline — $ts")
+$md.Add("# FlapsErp Perf Baseline - $ts")
 $md.Add("")
 if ($result.probes.baseline) {
   $b = $result.probes.baseline
@@ -137,7 +165,7 @@ if ($result.probes.com) {
 if ($result.probes.cdp) {
   $d = $result.probes.cdp
   $md.Add("## cdp: erpRunning=$($d.erpRunning)")
-  foreach ($p in $d.probes) { $md.Add("- port $($p.port): $($p.status)") }
+  foreach ($p in $d.probes) { $md.Add("- port $($p.port): $($p.status) owner=$($p.ownerName)($($p.ownerPid)) browser=$($p.browser)") }
 }
 $mdPath = Join-Path $outDir 'perf-summary.md'
 $md | Set-Content -LiteralPath $mdPath -Encoding UTF8
