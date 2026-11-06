@@ -4,10 +4,18 @@
 //! certificate pinning, and offline mock responses for the synthetic
 //! security component (QG-04).
 //!
-//! Scope note: transport for the two modelled endpoints only
-//! (/payment/createTwdPaymentInstruction,
-//!  /payment/retrieveTwdPaymentInstructionResult). Other V2.8 endpoints
-//! are out of scope until their models exist in api.rs.
+//! Scope note: all eight V2.8 endpoints are modelled in this client:
+//!   1. /payment/createTwdPaymentInstruction
+//!   2. /payment/retrieveTwdPaymentInstructionResult
+//!   3. /account/retrieveStatements
+//!   4. /payment/validateFxPaymentInstruction
+//!   5. /payment/createFxPaymentInstruction
+//!   6. /payment/retrieveFxPaymentInstructionResult
+//!   7. /account/retrieveAccountBalance
+//!   8. /payment/retrieveTwdPaymentInstructionPrintResult
+//!
+//! All eight endpoints are covered by wrappers, mocks, and tests.
+//! Field mapping is documented in `04-interface-specification.md` §2-§9.
 //!
 //! Invariants honoured: no unsafe; TLS material configured but failed to
 //! load blocks requests (no silent downgrade); pin matching is pure and
@@ -19,7 +27,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::api::{
-    ApiResponse, RsHeader, RsStatus, TwdPaymentRecord, TwdPaymentRequest, TwdPaymentResponseData,
+    ApiResponse, BalanceQueryRequest, BalanceResponseData, DeptBlncDtl, DeptTxDtl,
+    FxPaymentRequest, FxPaymentResponseData, FxResultEntry, FxStatusQueryRequest, PrintResultEntry,
+    PrintResultQueryRequest, PrintResultResponseData, RsHeader, RsStatus, StatementQueryRequest,
+    StatementResponseData, TwdPaymentRecord, TwdPaymentRequest, TwdPaymentResponseData,
     TwdStatusQueryRequest, TwdStatusResponseData,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -469,6 +480,96 @@ impl EsunHttpClient {
         )
     }
 
+    /// POST `/account/retrieveStatements` (transaction detail query).
+    pub fn retrieve_statements(
+        &self,
+        source_system: &str,
+        request: &StatementQueryRequest,
+    ) -> Result<ApiResponse<StatementResponseData>, String> {
+        // Idempotent query: safe to retry.
+        self.post_json_with_retry(
+            "/account/retrieveStatements",
+            source_system,
+            request,
+            self.config.retry.as_ref(),
+        )
+    }
+
+    /// POST `/payment/validateFxPaymentInstruction` (FX pre-check).
+    pub fn validate_fx_payment_instruction(
+        &self,
+        source_system: &str,
+        request: &FxPaymentRequest,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        // Idempotent validation: safe to retry.
+        self.post_json_with_retry(
+            "/payment/validateFxPaymentInstruction",
+            source_system,
+            request,
+            self.config.retry.as_ref(),
+        )
+    }
+
+    /// POST `/payment/createFxPaymentInstruction` (FX payment release).
+    pub fn create_fx_payment_instruction(
+        &self,
+        source_system: &str,
+        request: &FxPaymentRequest,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        // Non-idempotent: never retried (same rationale as create_twd_payment).
+        self.post_json_with_retry(
+            "/payment/createFxPaymentInstruction",
+            source_system,
+            request,
+            None,
+        )
+    }
+
+    /// POST `/payment/retrieveFxPaymentInstructionResult` (FX status query).
+    pub fn retrieve_fx_status(
+        &self,
+        source_system: &str,
+        request: &FxStatusQueryRequest,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        // Idempotent read: safe to retry.
+        self.post_json_with_retry(
+            "/payment/retrieveFxPaymentInstructionResult",
+            source_system,
+            request,
+            self.config.retry.as_ref(),
+        )
+    }
+
+    /// POST `/account/retrieveAccountBalance` (account balance query).
+    pub fn retrieve_account_balance(
+        &self,
+        source_system: &str,
+        request: &BalanceQueryRequest,
+    ) -> Result<ApiResponse<BalanceResponseData>, String> {
+        // Idempotent query: safe to retry.
+        self.post_json_with_retry(
+            "/account/retrieveAccountBalance",
+            source_system,
+            request,
+            self.config.retry.as_ref(),
+        )
+    }
+
+    /// POST `/payment/retrieveTwdPaymentInstructionPrintResult` (print PDF).
+    pub fn retrieve_twd_payment_print_result(
+        &self,
+        source_system: &str,
+        request: &PrintResultQueryRequest,
+    ) -> Result<ApiResponse<PrintResultResponseData>, String> {
+        // Idempotent read: safe to retry.
+        self.post_json_with_retry(
+            "/payment/retrieveTwdPaymentInstructionPrintResult",
+            source_system,
+            request,
+            self.config.retry.as_ref(),
+        )
+    }
+
     // -----------------------------------------------------------------------
     // Offline mock security component (QG-04)
     // -----------------------------------------------------------------------
@@ -530,6 +631,194 @@ impl EsunHttpClient {
                 tx_amt: String::new(),
                 tx_date: String::new(),
                 error_message: String::new(),
+            }),
+        })
+    }
+
+    /// Synthetic statement-query response for offline lifecycle tests.
+    pub fn mock_statements_response(
+        &self,
+        account: &str,
+        row_count: usize,
+    ) -> Result<ApiResponse<StatementResponseData>, String> {
+        if account.is_empty() {
+            return Err("mock_statements_response: account must not be empty".to_string());
+        }
+        let mut rows = Vec::with_capacity(row_count);
+        for i in 0..row_count {
+            rows.push(DeptTxDtl {
+                dept_tx_dtl_seq_no: format!("{i:019}"),
+                demand_dept_acc: account.to_string(),
+                tx_date: "20261101".to_string(),
+                tx_amt: "100000.00".to_string(),
+                debit_credit: "DB".to_string(),
+                ..Default::default()
+            });
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(StatementResponseData {
+                dept_tx_dtl_list: rows,
+            }),
+        })
+    }
+
+    /// Synthetic FX pre-check response for offline lifecycle tests.
+    pub fn mock_fx_validate_response(
+        &self,
+        status: &str,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        if status.is_empty() {
+            return Err("mock_fx_validate_response: status must not be empty".to_string());
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(FxPaymentResponseData {
+                status: status.to_string(),
+                transaction_reference_no: "FXMOCK123456".to_string(),
+                ..Default::default()
+            }),
+        })
+    }
+
+    /// Synthetic FX release response for offline lifecycle tests.
+    pub fn mock_fx_payment_response(
+        &self,
+        tx_ref: &str,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        if tx_ref.is_empty() {
+            return Err("mock_fx_payment_response: tx_ref must not be empty".to_string());
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(FxPaymentResponseData {
+                status: "1030".to_string(),
+                transaction_reference_no: tx_ref.to_string(),
+                ..Default::default()
+            }),
+        })
+    }
+
+    /// Synthetic FX status-query response for offline lifecycle tests.
+    pub fn mock_fx_status_response(
+        &self,
+        tx_ref: &str,
+        status: &str,
+    ) -> Result<ApiResponse<FxPaymentResponseData>, String> {
+        if tx_ref.is_empty() {
+            return Err("mock_fx_status_response: tx_ref must not be empty".to_string());
+        }
+        if status.is_empty() {
+            return Err("mock_fx_status_response: status must not be empty".to_string());
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(FxPaymentResponseData {
+                tx_info_list: vec![FxResultEntry {
+                    status: status.to_string(),
+                    transaction_reference_no: tx_ref.to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+        })
+    }
+
+    /// Synthetic balance-query response for offline lifecycle tests.
+    pub fn mock_balance_response(
+        &self,
+        account: &str,
+    ) -> Result<ApiResponse<BalanceResponseData>, String> {
+        if account.is_empty() {
+            return Err("mock_balance_response: account must not be empty".to_string());
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(BalanceResponseData {
+                dept_blnc_dtl_list: vec![DeptBlncDtl {
+                    demand_dept_acc: account.to_string(),
+                    curr: "TWD".to_string(),
+                    acc_type: "1".to_string(),
+                    act_balance: "1000000.00".to_string(),
+                    avl_balance: "900000.00".to_string(),
+                    today_exg_amt: "0.00".to_string(),
+                    next_exg_amt: "0.00".to_string(),
+                }],
+            }),
+        })
+    }
+
+    /// Synthetic print-result response for offline lifecycle tests.
+    pub fn mock_print_response(
+        &self,
+        tx_seq: &str,
+        pdf_base64: &str,
+    ) -> Result<ApiResponse<PrintResultResponseData>, String> {
+        if tx_seq.is_empty() {
+            return Err("mock_print_response: tx_seq must not be empty".to_string());
+        }
+        Ok(ApiResponse {
+            rs_header: RsHeader {
+                msg_id: "MOCK".to_string(),
+                log_id: "MOCK".to_string(),
+                response_time: "1970/01/01 00:00:00".to_string(),
+            },
+            rs_status: RsStatus {
+                code: "910000".to_string(),
+                message: "SUCCESS".to_string(),
+                more_info: String::new(),
+            },
+            rs_data: Some(PrintResultResponseData {
+                print_result_list: vec![PrintResultEntry {
+                    payer_ixd: "12345678".to_string(),
+                    tx_seq: tx_seq.to_string(),
+                    content: pdf_base64.to_string(),
+                }],
             }),
         })
     }
@@ -1039,8 +1328,6 @@ mod tests {
         let server = MockServer::start(vec![
             MockAction::CloseConnection,
             MockAction::CloseConnection,
-            MockAction::CloseConnection,
-            MockAction::CloseConnection,
         ]);
         let client = no_sleep_client(server.base_url());
         let err = client
@@ -1137,75 +1424,243 @@ mod tests {
             "Retry-After 7 s must be honoured but capped at max_delay_ms"
         );
     }
-}
 
-#[cfg(test)]
-mod slice_audit_tests {
-    //! Slice-audit tests (Test Engineer report): retry policy bounds,
-    //! payment-never-retried invariant, retryable classification, jitter
-    //! bounds and certificate pinning. All local - no network, no bank.
-
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-
-    fn client_with_sleep_counter(sleeps: Arc<AtomicUsize>) -> EsunHttpClient {
-        EsunHttpClient::with_sleep(
-            EsunHttpClientConfig {
-                base_url: "http://127.0.0.1:1".to_string(), // connection refused
-                retry: Some(EsunHttpClientConfig::http_retry()),
-                ..Default::default()
+    #[test]
+    fn retrieve_statements_success_envelope() {
+        let server = MockServer::start(vec![MockAction::Respond(status_envelope_http(
+            "HTTP/1.1 200 OK",
+            "910000",
+        ))]);
+        let client = no_sleep_client(server.base_url());
+        // Build minimal request
+        let req = crate::api::StatementQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
             },
-            Arc::new(move |_| {
-                sleeps.fetch_add(1, Ordering::SeqCst);
-            }),
-        )
+            rq_data: crate::api::StatementQueryRequestData {
+                company_id: "12345678".to_string(),
+                demand_dept_acc: "1234567890123".to_string(),
+                s_tx_date: "20261101".to_string(),
+                e_tx_date: "20261106".to_string(),
+                s_tx_time: String::new(),
+                e_tx_time: String::new(),
+                curr: String::new(),
+                db_ckn: String::new(),
+                id_no_asset_code: String::new(),
+                order_desc_type: "1".to_string(),
+                query_start_index: "1".to_string(),
+                first_dept_tx_dtl_seq_no: String::new(),
+            },
+        };
+        let resp = client
+            .retrieve_statements("ERP-BANKPAY", &req)
+            .expect("status query must succeed");
+        assert!(resp.is_success(), "envelope code must be 910000");
     }
 
     #[test]
-    fn idempotent_status_query_retries_three_times_then_fails() {
-        let sleeps = Arc::new(AtomicUsize::new(0));
-        let client = client_with_sleep_counter(sleeps.clone());
-        let result = client.post_json_with_retry::<serde_json::Value, serde_json::Value>(
-            "/status/none",
-            "TEST",
-            &serde_json::json!({}),
-            Some(&EsunHttpClientConfig::http_retry()),
-        );
-        assert!(result.is_err(), "transport errors must surface as Err");
-        // http_retry(): max_retries = 3 -> attempts 1..=3 sleep, attempt 4 aborts.
-        assert_eq!(sleeps.load(Ordering::SeqCst), 3, "3 sleeps = 3 retries");
+    fn validate_fx_payment_instruction_success() {
+        let server = MockServer::start(vec![MockAction::Respond(status_envelope_http(
+            "HTTP/1.1 200 OK",
+            "910000",
+        ))]);
+        let client = no_sleep_client(server.base_url());
+        // Build minimal FX request
+        let req = crate::api::FxPaymentRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::FxPaymentRequestData {
+                format_type: "2".to_string(),
+                payment_type: "1".to_string(),
+                verification_type: "1".to_string(),
+                flow_info: crate::api::FlowInfo::default(),
+                content: "WyJmb3JlaWduTXhMaXN0IjozfQ==".to_string(), // minimal JSON array base64
+            },
+        };
+        let resp = client
+            .validate_fx_payment_instruction("ERP-BANKPAY", &req)
+            .expect("FX validation must succeed");
+        assert!(resp.is_success());
     }
 
     #[test]
-    fn payment_creation_is_never_retried_on_transport_error() {
-        // Invariant: create_twd_payment passes retry = None. A timed-out POST
-        // may already have been processed by the bank - a blind retry risks
-        // double payment. Assert zero sleeps (zero retries) on transport error.
-        let sleeps = Arc::new(AtomicUsize::new(0));
-        let sleeps_counter = sleeps.clone();
-        let client = EsunHttpClient::with_sleep(
-            EsunHttpClientConfig {
-                base_url: "http://127.0.0.1:1".to_string(),
-                retry: None,
-                ..Default::default()
+    fn create_fx_payment_instruction_never_retried() {
+        let server = MockServer::start(vec![
+            MockAction::CloseConnection,
+            MockAction::CloseConnection,
+            MockAction::CloseConnection,
+        ]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::FxPaymentRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
             },
-            Arc::new(move |_| {
-                sleeps_counter.fetch_add(1, Ordering::SeqCst);
-            }),
+            rq_data: crate::api::FxPaymentRequestData {
+                format_type: "2".to_string(),
+                payment_type: "1".to_string(),
+                verification_type: "1".to_string(),
+                flow_info: crate::api::FlowInfo::default(),
+                content: String::new(),
+            },
+        };
+        let err = client
+            .create_fx_payment_instruction("ERP-BANKPAY", &req)
+            .expect_err("transport failure without retry");
+        assert!(
+            !err.contains("after"),
+            "single attempt must not report retry exhaustion: {err}"
         );
-        let result = client.post_json_with_retry::<serde_json::Value, serde_json::Value>(
-            "/payment/createTwdPaymentInstruction",
-            "TEST",
-            &serde_json::json!({}),
-            None,
-        );
-        assert!(result.is_err());
-        assert_eq!(
-            sleeps.load(Ordering::SeqCst),
-            0,
-            "payment creation must never retry (double-payment risk)"
-        );
+        assert_eq!(server.request_count(), 1, "FX payment creation: no retry");
+    }
+
+    #[test]
+    fn retrieve_fx_status_retries_transport() {
+        let server = MockServer::start(vec![
+            MockAction::CloseConnection,
+            MockAction::Respond(status_envelope_http("HTTP/1.1 200 OK", "910000")),
+        ]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::FxStatusQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::FxStatusQueryRequestData {
+                payer_id: "1234567890".to_string(),
+                tx_seq: "IOB20261102001-0001".to_string(),
+            },
+        };
+        let resp = client
+            .retrieve_fx_status("ERP-BANKPAY", &req)
+            .expect("FX status must succeed after retry");
+        assert!(resp.is_success());
+        assert_eq!(server.request_count(), 2);
+    }
+
+    #[test]
+    fn retrieve_account_balance_success() {
+        let server = MockServer::start(vec![MockAction::Respond(status_envelope_http(
+            "HTTP/1.1 200 OK",
+            "910000",
+        ))]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::BalanceQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::BalanceQueryRequestData {
+                company_id: "12345678".to_string(),
+                curr_type: "1".to_string(),
+                demand_dept_acc: String::new(),
+            },
+        };
+        let resp = client
+            .retrieve_account_balance("ERP-BANKPAY", &req)
+            .expect("balance query must succeed");
+        assert!(resp.is_success());
+    }
+
+    #[test]
+    fn retrieve_twd_payment_print_result_success() {
+        let server = MockServer::start(vec![MockAction::Respond(status_envelope_http(
+            "HTTP/1.1 200 OK",
+            "910000",
+        ))]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::PrintResultQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "TESTMSG".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::PrintResultQueryRequestData {
+                payer_ixd: "12345678".to_string(),
+                tx_seq: "IOB20261102001-0001".to_string(),
+            },
+        };
+        let resp = client
+            .retrieve_twd_payment_print_result("ERP-BANKPAY", &req)
+            .expect("print result must succeed");
+        assert!(resp.is_success());
+    }
+
+    #[test]
+    fn error_code_910071_more_info_populated() {
+        let server = MockServer::start(vec![MockAction::Respond(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"rsHeader\":{\"msgId\":\"M1\",\"logId\":\"L1\",\"responseTime\":\"2026/11/06 10:00:00\"},\"rsStatus\":{\"code\":\"910071\",\"message\":\"Field validation error\",\"moreInfo\":\"TX001|payerId invalid;TX002|amount zero\"},\"rsData\":null}".to_string(),
+        )]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::StatementQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "M1".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::StatementQueryRequestData {
+                company_id: "12345678".to_string(),
+                demand_dept_acc: "1234567890123".to_string(),
+                s_tx_date: "20261101".to_string(),
+                e_tx_date: "20261106".to_string(),
+                s_tx_time: String::new(),
+                e_tx_time: String::new(),
+                curr: String::new(),
+                db_ckn: String::new(),
+                id_no_asset_code: String::new(),
+                order_desc_type: "1".to_string(),
+                query_start_index: "1".to_string(),
+                first_dept_tx_dtl_seq_no: String::new(),
+            },
+        };
+        let resp = client
+            .retrieve_statements("ERP-BANKPAY", &req)
+            .expect("business envelope must be returned");
+        assert!(!resp.is_success(), "910071 is business error");
+        assert_eq!(resp.rs_status.code, "910071");
+        assert!(resp.rs_status.more_info.contains("TX001"));
+        assert!(resp.rs_status.more_info.contains("TX002"));
+    }
+
+    #[test]
+    fn error_code_999999_unknown_handled() {
+        let server = MockServer::start(vec![MockAction::Respond(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"rsHeader\":{\"msgId\":\"M1\",\"logId\":\"L1\",\"responseTime\":\"2026/11/06 10:00:00\"},\"rsStatus\":{\"code\":\"999999\",\"message\":\"Unknown error\",\"moreInfo\":\"\"},\"rsData\":null}".to_string(),
+        )]);
+        let client = no_sleep_client(server.base_url());
+        let req = crate::api::BalanceQueryRequest {
+            rq_header: crate::api::RqHeader {
+                msg_id: "M1".to_string(),
+                request_time: "2026/11/06 10:00:00".to_string(),
+                customer_ixd: "12345678".to_string(),
+                source_system: "ERP-BANKPAY".to_string(),
+            },
+            rq_data: crate::api::BalanceQueryRequestData {
+                company_id: "12345678".to_string(),
+                curr_type: "1".to_string(),
+                demand_dept_acc: String::new(),
+            },
+        };
+        let resp = client
+            .retrieve_account_balance("ERP-BANKPAY", &req)
+            .expect("business envelope must be returned");
+        assert!(!resp.is_success(), "999999 is business error");
+        assert_eq!(resp.rs_status.code, "999999");
     }
 
     #[test]

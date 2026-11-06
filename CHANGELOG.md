@@ -25,6 +25,7 @@
 
 ### Added
 
+- **Three-way reconciliation engine** (`wellfit_integration::three_way`, Phase C8): compares EKPI governance decisions ↔ event-backbone records ↔ Wellfit execution results keyed by business reference. Decision conflicts, unauthorized execution of rejected/escalated decisions, and missing sides are quarantined into an append-only isolation list with a deterministic SHA-256 audit hash — never silently corrected. Cross-repo interchange is via serde JSON contracts only (no path dependency on ekpi-platform).
 - A repeatable synthetic Shopee/Reports capacity runner and measured one-million-record baseline with hashes, resource observations, and explicit non-SLA limitations.
 - Kilo Gateway 429 diagnostic guidance distinguishing documented anonymous limits from unknown authenticated/provider quotas and prohibiting disclosure of credentials or sensitive prompts.
 - **OEaAP 協助與自動化層（Phase 1–3，未發布）**：新增 `wellfit_assist`（多格式／多編碼資料轉換、報表產生、異常偵測、影子模式證據鏈）與 `wellfit_integration`（ERP 協調、雙軌對帳、功能旗標切換、切換演練）兩 crate；`wellfit_core` 新增自動化框架（重試退避、斷路器、工作流追蹤）、稽核完整性（SHA-256 鏈）、客戶自動化、庫存自動化；`wellfit_shopee`／`wellfit_mtrix`／`wellfit_bankpay` 各新增採購／出庫／應付自動化協調器。
@@ -32,6 +33,7 @@
 - 安全工作區審查與 ADR：`docs/SECURITY_REVIEW.md`、ADR-0004~0008（影子模式策略、韌性政策、稽核鏈、雙軌門檻、旗標切換）。
 - 外部依賴整備：`docs/operations/VENDOR_RESPONSE_INTAKE.md`（OQ-F1/F2 原廠回覆收件與落碼映射）、`docs/bankpay/09-sandbox-acceptance-runbook.md`（OQ-E3 沙盒機械化執行手冊）、`docs/operations/PRODUCTION_AUTHORIZATION_DECISION.md`（生產授權階段決策：不即刻生產、授權階段式條件推進）。
 - **S1-1 影子擷取**：`wellfit_assist::capture`（唯讀、100 MiB 上限、欄位名稱契約、獨立重算庫存恆等式、溢位安全）＋ CLI `wellfit shadow --pipeline reports --input <檔> --artifacts <目錄> --batch <id>`（退出碼 0=一致／2=有差異證據／1=錯誤）＋ 證據格式 `wellfit-shadow-evidence/v1` ＋ 規格 `docs/operations/SHADOW_CAPTURE_SPECIFICATION.md`（S1-1~S1-4 全定義）。實測：MATCH 4/4（合成示範）與 DIFF 偵測（注入單列錯誤）皆通過。
+- **`wellfit_bankpay` E.Sun V2.8 6 個剩餘端點（Phase A）**：`/payment/validateFxPaymentInstruction`、`/payment/createFxPaymentInstruction`、`/payment/retrieveFxPaymentInstructionResult`、`/account/retrieveStatements`、`/account/retrieveAccountBalance`、`/payment/retrieveTwdPaymentInstructionPrintResult` 全部實作。付款類（createTwdPayment、createFxPaymentInstruction）永不重試；查詢類（createTwdPayment 以外全部）以 `post_json_with_retry` + `RetryConfig`（full-jitter、Retry-After 截斷、3 次上限）重試。`api.rs` 新增 `StatementQueryRequest/ResponseData`、`FxPaymentRequest/ResponseData`、`FxPaymentTx`、`FxStatusQueryRequest`、`BalanceQuery/ResponseData`、`PrintResultQuery/ResponseData`、`ForeignTx`、`FxResultEntry`、`DeptTxDtl`、`DeptBlncDtl`、`PrintResultEntry`、`TxStatus`/`ApiResult` 常數；欄位與 `docs/bankpay/04-interface-specification.md` §2–§9 嚴格對應，camelCase serde 重新命名，金額為字串（禁止浮點）。每端點皆有 `mock_*_response`（空清單、邊界金額、PDF base64）；`http.rs` scope note 已更新列明 8 端點。**驗證**：`cargo test -p wellfit_bankpay` 77 passed、0 failed；`cargo test --test integration_tests` 17 passed、0 failed；`cargo clippy -- -D warnings` 零警告；`cargo fmt --check` 0 差異；重試套件連跑 3 次零 flakiness；REQ-003…008 全部標記為已實作。
 
 ### 變更（Changed）
 
