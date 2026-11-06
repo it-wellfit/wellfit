@@ -1,8 +1,9 @@
-﻿# Wellfit — 大前實業輔翼 ERP 與三大產品自動化引擎
+# Wellfit — 大前實業輔翼 ERP 與三大產品自動化引擎
 
-> 文件編號：WFLT-README-001｜狀態：Draft｜版本：v1.0｜日期：2026-10-20
+> 文件編號：WFLT-README-001｜狀態：Draft｜版本：v1.1｜日期：2026-11-06
 > 撰寫：Wellfit 知識庫維護者｜審閱：未審閱｜核准：未核准
-> 變更摘要：v1.0 再對齊後重寫。撤回「58 欄全景清洗驗證」「27 項格式異常」「VR-01~08」三項無來源宣稱；
+> 變更摘要：v1.1。新增 wellfit_assist（OEKAP 協助層：S1-1 影子擷取）與 wellfit_integration（ERP 協調層）兩 crate 說明、wellfit shadow 子命令；工作區 7→9 crates。
+> v1.0 再對齊後重寫。撤回「58 欄全景清洗驗證」「27 項格式異常」「VR-01~08」三項無來源宣稱；
 > 修正四個指向他機的 `file:///c:/Users/User/OneDrive/...` 連結、`contracts/federation/` 引用與
 > `data/fuyi_inventory.csv` 範例；新增「規格來源」與「已知缺口」兩節。
 > 驗證標記：✔ 已對原始文件逐字查證｜△ 依標準條文或通行做法推導｜未驗證 本次無法確認
@@ -11,7 +12,7 @@
 
 ## 1. 這是什麼
 
-Wellfit 是一個 **7-crate Rust 工作區**，把大前實業（Dachen Industrial）輔翼 ERP 與外部產品之間的資料往來
+Wellfit 是一個 **9-crate Rust 工作區**，把大前實業（Dachen Industrial）輔翼 ERP 與外部產品之間的資料往來
 變成可驗證、可追溯、可重送的管線：
 
 | 產品 | 資料流 | 核心不變量 |
@@ -32,7 +33,9 @@ Wellfit 是一個 **7-crate Rust 工作區**，把大前實業（Dachen Industri
 | `wellfit_mtrix` | [`crates/wellfit_mtrix/`](crates/wellfit_mtrix/) | MTRIX 五檔（ALTHCI／ALTHES／ALTHFV／ALTHPD／ALTHVD）**56 欄契約**（`spec.rs`）、**VR-01..VR-14** 驗證規則（`validators.rs`）、**ANOM-01..ANOM-12** 修復規則（`repairs.rs`）、跨檔參照與幣別分組彙總 |
 | `wellfit_bankpay` | [`crates/wellfit_bankpay/`](crates/wellfit_bankpay/) | E.Sun BankPay 媒體匯出、回覆匯入及 API 查詢 |
 | `wellfit_sync` | [`crates/wellfit_sync/`](crates/wellfit_sync/) | 設備探索、同步狀態及 daemon 骨架；資料傳輸尚未實作 |
-| `wellfit_cli` | [`crates/wellfit_cli/`](crates/wellfit_cli/) | `wellfit.exe` 進入點，九個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec`／`access-control`／`jit`／`bankpay` |
+| `wellfit_assist` | [`crates/wellfit_assist/`](crates/wellfit_assist/) | OEKAP 協助層：多格式邊界與編碼轉換（`DataFormat`／`Charset`）、報表輸出、異常偵測（`ZScoreDetector`）、影子模式證據（`ShadowCompare`／`EvidenceStore`）、**S1-1 影子擷取** `capture_reports_export` |
+| `wellfit_integration` | [`crates/wellfit_integration/`](crates/wellfit_integration/) | ERP 協調層：雙軌對帳引擎（`CoordinationEngine`）、欄位級 diff（`ReconciliationEngine`）、功能旗標階段式切換（`SwitchingController`）、切換演練（`SwitchingDrill`） |
+| `wellfit_cli` | [`crates/wellfit_cli/`](crates/wellfit_cli/) | `wellfit.exe` 進入點，十個子命令：`status`／`shopee`／`reports`／`mtrix`／`audit`／`spec`／`access-control`／`jit`／`bankpay`／`shadow` |
 
 > **重要更正**：舊版文件提到的 `contracts/federation/` **目錄不存在**。
 > 聯邦契約是以 Rust 模組實作，位置為 `crates/wellfit_core/src/federation.rs`，對外介面為 `wellfit_core::federation`。
@@ -79,6 +82,7 @@ $wf = "$env:LOCALAPPDATA\Temp\wellfit-target\debug\wellfit.exe"
 # 帳本狀態與稽核
 & $wf status --db "$env:TEMP\wellfit-ledger.sqlite"
 & $wf audit --data-dir data
+& $wf shadow --pipeline reports --input data/fuyi_inventory_report.csv --batch DEMO-SHADOW-001
 ```
 
 > **更正**：舊版文件的 `reports --input data/fuyi_inventory.csv` 範例指向不存在的檔案。
